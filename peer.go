@@ -622,8 +622,6 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	logger.Debugw("written to mfs", "cid", node.Cid().String())
 	logger.Debugw("new mfs root", "cid", rootCid.String())
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if err := p.dht.Provide(ctx, node.Cid(), true); err != nil {
 		return node, fmt.Errorf("provide file cid: %w", err)
 	}
