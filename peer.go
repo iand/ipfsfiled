@@ -535,9 +535,9 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.Node, error) {
 	logger.Debugw("adding file", "path", path)
 
-	relPath, err := filepath.Rel(p.datastorePath, path)
+	relPath, err := filepath.Rel(p.fileSystemPath, path)
 	if err != nil {
-		return nil, fmt.Errorf("path not relative to %s: %w", p.datastorePath, err)
+		return nil, fmt.Errorf("path not relative to %s: %w", p.fileSystemPath, err)
 	}
 	baseName := filepath.Base(path)
 	if baseName == "" {
