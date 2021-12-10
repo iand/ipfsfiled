@@ -86,5 +86,5 @@ var (
 )
 
 const (
-	DefaultBlockSize = 1 << 21 // 2MiB
+	DefaultBlockSize = 1 << 20 // 1MiB
 )
