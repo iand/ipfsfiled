@@ -440,6 +440,8 @@ func (p *Peer) setupMfs() error {
 	if err != nil {
 		return fmt.Errorf("new root: %w", err)
 	}
+	root.GetDirectory().SetCidBuilder(p.builder)
+
 	p.mu.Lock()
 	p.mfsRoot = root
 	p.mu.Unlock()
