@@ -535,6 +535,15 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.Node, error) {
 	logger.Debugw("adding file", "path", path)
 
+	relPath, err := filepath.Rel(p.datastorePath, path)
+	if err != nil {
+		return nil, fmt.Errorf("path not relative to %s: %w", p.datastorePath, err)
+	}
+	baseName := filepath.Base(path)
+	if baseName == "" {
+		return nil, fmt.Errorf("path does not refer to a file: %s", path)
+	}
+
 	f, err := os.Open(path) // For read access.
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
@@ -575,41 +584,54 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	if err != nil {
 		return nil, fmt.Errorf("layout dag: %w", err)
 	}
-	logger.Debugw("added to ipfs", "cid", node.Cid().String())
+	logger.Debugw("written to blockstore", "cid", node.Cid().String())
+
+	// TODO: Add to mfs
+	mfsPath := filepath.Join("/", relPath)
+	mfsDir := filepath.Dir(mfsPath)
+
+	dirOpts := mfs.MkdirOpts{
+		Mkparents:  true,
+		Flush:      true,
+		CidBuilder: p.builder,
+	}
+
+	if err := mfs.Mkdir(p.mfsRoot, mfsDir, dirOpts); err != nil {
+		return nil, fmt.Errorf("mfs mkdir %s: %w", mfsDir, err)
+	}
+
+	dir, err := p.lookupDir(mfsDir)
+	if err != nil {
+		return nil, fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
+	}
+
+	err = dir.AddChild(baseName, node)
+	if err != nil {
+		return nil, fmt.Errorf("put node %s: %s", mfsPath, err)
+	}
+
+	if _, err := mfs.FlushPath(context.TODO(), p.mfsRoot, mfsPath); err != nil {
+		return nil, fmt.Errorf("flush path %s: %s", mfsPath, err)
+	}
+
+	rootCid, err := p.rootCid()
+	if err != nil {
+		return nil, fmt.Errorf("get mfs root cid: %s", err)
+	}
+
+	logger.Debugw("written to mfs", "cid", node.Cid().String())
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if err := p.dht.Provide(ctx, node.Cid(), true); err != nil {
-		return node, fmt.Errorf("provide node cid: %w", err)
+		return node, fmt.Errorf("provide file cid: %w", err)
 	}
+	logger.Debugw("announced file to dht", "cid", node.Cid().String())
 
-	// TODO: Add to mfs
-	// 	mfsPath := filepath.Join("/", ef.Path())
-	// 	mfsDir := filepath.Dir(mfsPath)
-
-	// 	dirOpts := mfs.MkdirOpts{
-	// 		Mkparents:  true,
-	// 		Flush:      true,
-	// 		CidBuilder: p.builder,
-	// 	}
-
-	// 	if err := mfs.Mkdir(p.mfsRoot, mfsDir, dirOpts); err != nil {
-	// 		return nil, fmt.Errorf("mfs mkdir %s: %w", mfsDir, err)
-	// 	}
-
-	// 	dir, err := p.lookupDir(mfsDir)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
-	// 	}
-
-	// 	err = dir.AddChild(ef.Filename(), node)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("put node %s: %s", mfsPath, err)
-	// 	}
-
-	// 	if _, err := mfs.FlushPath(context.TODO(), p.mfsRoot, mfsPath); err != nil {
-	// 		return nil, fmt.Errorf("flush path %s: %s", mfsPath, err)
-	// 	}
+	if err := p.dht.Provide(ctx, rootCid, true); err != nil {
+		return node, fmt.Errorf("provide mfs root: %w", err)
+	}
+	logger.Debugw("announced mfs root to dht", "cid", rootCid.String())
 
 	return node, nil
 }
