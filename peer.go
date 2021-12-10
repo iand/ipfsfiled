@@ -620,6 +620,7 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	}
 
 	logger.Debugw("written to mfs", "cid", node.Cid().String())
+	logger.Debugw("new mfs root", "cid", rootCid.String())
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
