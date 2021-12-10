@@ -84,3 +84,7 @@ var (
 		},
 	}
 )
+
+const (
+	DefaultBlockSize = 1 << 21 // 2MiB
+)

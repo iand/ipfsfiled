@@ -576,8 +576,6 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 		return nil, fmt.Errorf("file info: %w", err)
 	}
 
-	// TODO: check modtime
-
 	r, err := files.NewReaderPathFile(path, f, fi)
 	if err != nil {
 		return nil, fmt.Errorf("new reader path file: %w", err)
@@ -595,7 +593,7 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 
 	// Split on fixed chunk sizes because rabin won't help much with deduplication since each block is unique, being a
 	// reference to part of a distinct file.
-	chnk := chunk.NewSizeSplitter(r, chunk.DefaultBlockSize)
+	chnk := chunk.NewSizeSplitter(r, DefaultBlockSize)
 	dbh, err := dbp.New(chnk)
 	if err != nil {
 		return nil, fmt.Errorf("new dag builder helper: %w", err)
