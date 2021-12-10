@@ -586,40 +586,16 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	}
 	logger.Debugw("written to blockstore", "cid", node.Cid().String())
 
-	// TODO: Add to mfs
 	mfsPath := filepath.Join("/", relPath)
-	mfsDir := filepath.Dir(mfsPath)
-
-	dirOpts := mfs.MkdirOpts{
-		Mkparents:  true,
-		Flush:      true,
-		CidBuilder: p.builder,
+	if err := p.addFileToMfs(ctx, mfsPath, node); err != nil {
+		return nil, fmt.Errorf("add file to mfs: %w", err)
 	}
-
-	if err := mfs.Mkdir(p.mfsRoot, mfsDir, dirOpts); err != nil {
-		return nil, fmt.Errorf("mfs mkdir %s: %w", mfsDir, err)
-	}
-
-	dir, err := p.lookupDir(mfsDir)
-	if err != nil {
-		return nil, fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
-	}
-
-	err = dir.AddChild(baseName, node)
-	if err != nil {
-		return nil, fmt.Errorf("put node %s: %s", mfsPath, err)
-	}
-
-	if _, err := mfs.FlushPath(context.TODO(), p.mfsRoot, mfsPath); err != nil {
-		return nil, fmt.Errorf("flush path %s: %s", mfsPath, err)
-	}
+	logger.Debugw("written to mfs", "cid", node.Cid().String())
 
 	rootCid, err := p.rootCid()
 	if err != nil {
 		return nil, fmt.Errorf("get mfs root cid: %s", err)
 	}
-
-	logger.Debugw("written to mfs", "cid", node.Cid().String())
 	logger.Debugw("new mfs root", "cid", rootCid.String())
 
 	if err := p.dht.Provide(ctx, node.Cid(), true); err != nil {
@@ -698,31 +674,81 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 // 	return node, nil
 // }
 
-// func (p *Peer) removeFile(ctx context.Context, ef *ExportFile) error {
-// 	mfsPath := filepath.Join("/", ef.Path())
-// 	mfsDir := filepath.Dir(mfsPath)
-// 	dir, err := p.lookupDir(mfsDir)
-// 	if err != nil {
-// 		return fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
-// 	}
+func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node) error {
+	mfsDir := filepath.Dir(mfsPath)
+	baseName := filepath.Base(mfsPath)
 
-// 	err = dir.Unlink(ef.Filename())
-// 	if err != nil {
-// 		return fmt.Errorf("unlink file %s: %s", mfsPath, err)
-// 	}
+	// Remove existing if it exists
+	_, err := mfs.Lookup(p.mfsRoot, mfsPath)
+	if err == nil {
+		// No error so file must exists and we need to remove it
+		dir, err := p.lookupDir(mfsDir)
+		if err != nil {
+			return fmt.Errorf("lookup dir %s: %w", mfsDir, err)
+		}
+		if err := dir.Unlink(baseName); err != nil {
+			return fmt.Errorf("unlink file %s: %s", mfsPath, err)
+		}
 
-// 	return nil
-// }
+	} else {
+		// Not exists is fine, we ignore it, otherwise return the error
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("lookup: %w", err)
+		}
+	}
 
-func (p *Peer) lookupDir(path string) (*mfs.Directory, error) {
-	di, err := mfs.Lookup(p.mfsRoot, path)
+	dirOpts := mfs.MkdirOpts{
+		Mkparents:  true,
+		Flush:      true,
+		CidBuilder: p.builder,
+	}
+
+	if err := mfs.Mkdir(p.mfsRoot, mfsDir, dirOpts); err != nil {
+		return fmt.Errorf("mkdir %s: %w", mfsDir, err)
+	}
+
+	dir, err := p.lookupDir(mfsDir)
+	if err != nil {
+		return fmt.Errorf("lookup dir %s: %w", mfsDir, err)
+	}
+
+	err = dir.AddChild(baseName, node)
+	if err != nil {
+		return fmt.Errorf("add child %s: %w", baseName, err)
+	}
+
+	if _, err := mfs.FlushPath(context.TODO(), p.mfsRoot, mfsPath); err != nil {
+		return fmt.Errorf("flush path %s: %w", mfsPath, err)
+	}
+
+	return nil
+}
+
+func (p *Peer) removeFile(ctx context.Context, mfsPath string) error {
+	mfsDir := filepath.Dir(mfsPath)
+	dir, err := p.lookupDir(mfsDir)
+	if err != nil {
+		return fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
+	}
+
+	baseName := filepath.Base(mfsPath)
+	err = dir.Unlink(baseName)
+	if err != nil {
+		return fmt.Errorf("unlink file %s: %s", mfsPath, err)
+	}
+
+	return nil
+}
+
+func (p *Peer) lookupDir(mfsDir string) (*mfs.Directory, error) {
+	di, err := mfs.Lookup(p.mfsRoot, mfsDir)
 	if err != nil {
 		return nil, err
 	}
 
 	d, ok := di.(*mfs.Directory)
 	if !ok {
-		return nil, fmt.Errorf("%s is not a directory", path)
+		return nil, fmt.Errorf("%s is not a directory", mfsDir)
 	}
 
 	return d, nil
@@ -737,8 +763,8 @@ func (p *Peer) rootCid() (cid.Cid, error) {
 	return node.Cid(), nil
 }
 
-func (p *Peer) fileExists(ctx context.Context, filePath string) (bool, cid.Cid, error) {
-	fsn, err := mfs.Lookup(p.mfsRoot, filePath)
+func (p *Peer) fileExists(ctx context.Context, mfsPath string) (bool, cid.Cid, error) {
+	fsn, err := mfs.Lookup(p.mfsRoot, mfsPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, cid.Undef, nil
