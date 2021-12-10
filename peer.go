@@ -526,7 +526,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 
 		_, aerr := p.AddFile(ctx, path, di)
 		if aerr != nil {
-			return fmt.Errorf("add file: %w", err)
+			return fmt.Errorf("add file: %w", aerr)
 		}
 		return nil
 	})
