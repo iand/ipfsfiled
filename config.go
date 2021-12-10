@@ -48,6 +48,7 @@ var (
 		datastorePath  string
 		fileSystemPath string
 		libp2pKeyfile  string
+		offline        bool
 	}
 
 	ipfsFlags = []cli.Flag{
@@ -74,6 +75,12 @@ var (
 			Usage:       "Path to libp2p key file.",
 			Value:       "/mnt/disk1/data/ipfsfiled/peer.key",
 			Destination: &ipfsConfig.libp2pKeyfile,
+		},
+		&cli.BoolFlag{
+			Name:        "offline",
+			Usage:       "When true, don't connect to the public ipfs dht.",
+			Value:       false,
+			Destination: &ipfsConfig.offline,
 		},
 	}
 )

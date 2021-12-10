@@ -351,7 +351,7 @@ func (p *Peer) bootstrap(peers []peer.AddrInfo) error {
 		return fmt.Errorf("dht bootstrap: %w", err)
 	}
 
-	p.printSwarmAddrs()
+	p.logHostAddresses()
 
 	return nil
 }
@@ -524,7 +524,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 			return nil
 		}
 
-		_, aerr := p.AddFile(ctx, path, di)
+		_, aerr := p.addFile(ctx, path, di)
 		if aerr != nil {
 			return fmt.Errorf("add file: %w", aerr)
 		}
@@ -532,7 +532,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 	})
 }
 
-func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.Node, error) {
+func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.Node, error) {
 	logger.Debugw("adding file", "path", path)
 
 	relPath, err := filepath.Rel(p.datastorePath, path)
@@ -570,7 +570,7 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 		CidBuilder: p.builder,
 	}
 
-	// TODO: special handling for car files
+	// TODO: special handling for car files - serve their blocks directly?
 
 	// Split on fixed chunk sizes because rabin won't help much with deduplication since each block is unique, being a
 	// reference to part of a distinct file.
@@ -590,7 +590,7 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	if err := p.addFileToMfs(ctx, mfsPath, node); err != nil {
 		return nil, fmt.Errorf("add file to mfs: %w", err)
 	}
-	logger.Debugw("written to mfs", "cid", node.Cid().String())
+	logger.Debugw("written to mfs", "cid", node.Cid().String(), "mfs_path", mfsPath)
 
 	rootCid, err := p.rootCid()
 	if err != nil {
@@ -610,69 +610,6 @@ func (p *Peer) AddFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 
 	return node, nil
 }
-
-// func (p *Peer) addFile(ctx context.Context, ef *ExportFile, shipDir string) (ipld.Node, error) {
-// 	ll := logger.With("table", ef.TableName, "date", ef.Date.String())
-// 	shipFile := filepath.Join(shipDir, ef.Path())
-// 	if _, err := os.Stat(shipFile); err != nil {
-// 		return nil, fmt.Errorf("file %s stat error: %w", shipFile, err)
-// 	}
-
-// 	f, err := os.Open(shipFile) // For read access.
-// 	if err != nil {
-// 		return nil, fmt.Errorf("open shipped file: %w", err)
-// 	}
-// 	defer f.Close()
-
-// 	dbp := helpers.DagBuilderParams{
-// 		Dagserv:    p,
-// 		RawLeaves:  true,
-// 		Maxlinks:   helpers.DefaultLinksPerBlock,
-// 		NoCopy:     false,
-// 		CidBuilder: p.builder,
-// 	}
-
-// 	chnk := chunk.NewRabin(f, 1<<13)
-// 	dbh, err := dbp.New(chnk)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("new dag builder helper: %w", err)
-// 	}
-
-// 	node, err := trickle.Layout(dbh)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("layout dag: %w", err)
-// 	}
-// 	ll.Debugw("added to ipfs", "cid", node.Cid().String())
-
-// 	mfsPath := filepath.Join("/", ef.Path())
-// 	mfsDir := filepath.Dir(mfsPath)
-
-// 	dirOpts := mfs.MkdirOpts{
-// 		Mkparents:  true,
-// 		Flush:      true,
-// 		CidBuilder: p.builder,
-// 	}
-
-// 	if err := mfs.Mkdir(p.mfsRoot, mfsDir, dirOpts); err != nil {
-// 		return nil, fmt.Errorf("mfs mkdir %s: %w", mfsDir, err)
-// 	}
-
-// 	dir, err := p.lookupDir(mfsDir)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
-// 	}
-
-// 	err = dir.AddChild(ef.Filename(), node)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("put node %s: %s", mfsPath, err)
-// 	}
-
-// 	if _, err := mfs.FlushPath(context.TODO(), p.mfsRoot, mfsPath); err != nil {
-// 		return nil, fmt.Errorf("flush path %s: %s", mfsPath, err)
-// 	}
-
-// 	return node, nil
-// }
 
 func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node) error {
 	mfsDir := filepath.Dir(mfsPath)
@@ -724,22 +661,6 @@ func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node)
 	return nil
 }
 
-func (p *Peer) removeFile(ctx context.Context, mfsPath string) error {
-	mfsDir := filepath.Dir(mfsPath)
-	dir, err := p.lookupDir(mfsDir)
-	if err != nil {
-		return fmt.Errorf("mfs lookup dir %s: %w", mfsDir, err)
-	}
-
-	baseName := filepath.Base(mfsPath)
-	err = dir.Unlink(baseName)
-	if err != nil {
-		return fmt.Errorf("unlink file %s: %s", mfsPath, err)
-	}
-
-	return nil
-}
-
 func (p *Peer) lookupDir(mfsDir string) (*mfs.Directory, error) {
 	di, err := mfs.Lookup(p.mfsRoot, mfsDir)
 	if err != nil {
@@ -780,22 +701,7 @@ func (p *Peer) fileExists(ctx context.Context, mfsPath string) (bool, cid.Cid, e
 	return true, node.Cid(), nil
 }
 
-func (p *Peer) provide(ctx context.Context) error {
-	mfsCid, err := p.rootCid()
-	if err != nil {
-		return fmt.Errorf("root cid: %w", err)
-	}
-	logger.Infof("providing root cid: %s", mfsCid.String())
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if err := p.reprovider.Provide(mfsCid); err != nil {
-		return fmt.Errorf("root cid: %w", err)
-	}
-	return nil
-}
-
-func (p *Peer) printSwarmAddrs() {
+func (p *Peer) logHostAddresses() {
 	if p.offline {
 		logger.Debugf("not listening, running in offline mode")
 		return

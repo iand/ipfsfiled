@@ -46,6 +46,7 @@ var app = &cli.App{
 			DatastorePath:  ipfsConfig.datastorePath,
 			FileSystemPath: ipfsConfig.fileSystemPath,
 			Libp2pKeyFile:  ipfsConfig.libp2pKeyfile,
+			Offline:        ipfsConfig.offline,
 		})
 		if err != nil {
 			return fmt.Errorf("new ipfs peer: %w", err)
