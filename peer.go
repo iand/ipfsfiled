@@ -463,6 +463,11 @@ func (p *Peer) Sync(ctx context.Context) error {
 		return fmt.Errorf("ensure files indexed: %w", err)
 	}
 
+	// provide the mfs root on the dht and ipns
+	if err := p.announceMfsRoot(ctx); err != nil {
+		return fmt.Errorf("announce mfs root: %w", err)
+	}
+
 	return nil
 }
 
@@ -532,6 +537,20 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 	})
 }
 
+func (p *Peer) announceMfsRoot(ctx context.Context) error {
+	logger.Infow("announcing mfs root")
+	rootCid, err := p.rootCid()
+	if err != nil {
+		return fmt.Errorf("get mfs root cid: %s", err)
+	}
+	logger.Debugw("new mfs root", "cid", rootCid.String())
+
+	if err := p.dht.Provide(ctx, rootCid, true); err != nil {
+		return fmt.Errorf("provide mfs root: %w", err)
+	}
+	return nil
+}
+
 func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.Node, error) {
 	logger.Debugw("adding file", "path", path)
 
@@ -592,21 +611,10 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	}
 	logger.Debugw("written to mfs", "cid", node.Cid().String(), "mfs_path", mfsPath)
 
-	rootCid, err := p.rootCid()
-	if err != nil {
-		return nil, fmt.Errorf("get mfs root cid: %s", err)
-	}
-	logger.Debugw("new mfs root", "cid", rootCid.String())
-
-	if err := p.dht.Provide(ctx, node.Cid(), true); err != nil {
+	if err := p.dht.Provide(ctx, node.Cid(), false); err != nil {
 		return node, fmt.Errorf("provide file cid: %w", err)
 	}
 	logger.Debugw("announced file to dht", "cid", node.Cid().String())
-
-	if err := p.dht.Provide(ctx, rootCid, true); err != nil {
-		return node, fmt.Errorf("provide mfs root: %w", err)
-	}
-	logger.Debugw("announced mfs root to dht", "cid", rootCid.String())
 
 	return node, nil
 }
