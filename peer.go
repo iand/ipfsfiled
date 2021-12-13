@@ -94,8 +94,8 @@ type Peer struct {
 	dht   routing.Routing
 	store datastore.Batching
 
-	ipld.DAGService // become a DAG service  (consider ipld.BufferedDAG)
-	bstore          *filestore.Filestore
+	dag    ipld.DAGService // (consider ipld.BufferedDAG)
+	bstore *filestore.Filestore
 
 	mu          sync.Mutex // guards writes to bserv, reprovider and mfsRoot fields
 	bserv       blockservice.BlockService
@@ -277,7 +277,7 @@ func (p *Peer) setupBlockService() error {
 }
 
 func (p *Peer) setupDAGService() error {
-	p.DAGService = merkledag.NewDAGService(p.bserv)
+	p.dag = merkledag.NewDAGService(p.bserv)
 	return nil
 }
 
@@ -411,7 +411,7 @@ func (p *Peer) setupMfs() error {
 	switch {
 	case err == datastore.ErrNotFound || val == nil:
 		nd = unixfs.EmptyDirNode()
-		err := p.Add(context.TODO(), nd)
+		err := p.dag.Add(context.TODO(), nd)
 		if err != nil {
 			return fmt.Errorf("write root: %w", err)
 		}
@@ -421,7 +421,7 @@ func (p *Peer) setupMfs() error {
 			return fmt.Errorf("cast root cid: %w", err)
 		}
 
-		rnd, err := p.Get(context.TODO(), c)
+		rnd, err := p.dag.Get(context.TODO(), c)
 		if err != nil {
 			return fmt.Errorf("get root: %w", err)
 		}
@@ -436,7 +436,7 @@ func (p *Peer) setupMfs() error {
 		return err
 	}
 
-	root, err := mfs.NewRoot(context.TODO(), p, nd, pf)
+	root, err := mfs.NewRoot(context.TODO(), p.dag, nd, pf)
 	if err != nil {
 		return fmt.Errorf("new root: %w", err)
 	}
@@ -446,6 +446,13 @@ func (p *Peer) setupMfs() error {
 	p.mfsRoot = root
 	p.mu.Unlock()
 	return nil
+}
+
+func (p *Peer) getMfsRoot() *mfs.Root {
+	p.mu.Lock()
+	r := p.mfsRoot
+	p.mu.Unlock()
+	return r
 }
 
 // Sync ensures that the underlying blockstore accurately represents the filesystem the peer is monitoring.
@@ -545,7 +552,7 @@ func (p *Peer) announceMfsRoot(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get mfs root cid: %s", err)
 	}
-	logger.Debugw("new mfs root", "cid", rootCid.String())
+	logger.Debugw("updated mfs root", "cid", rootCid.String())
 
 	if err := p.dht.Provide(ctx, rootCid, true); err != nil {
 		return fmt.Errorf("provide mfs root: %w", err)
@@ -582,7 +589,7 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	}
 
 	dbp := helpers.DagBuilderParams{
-		Dagserv:    p,
+		Dagserv:    p.dag,
 		RawLeaves:  true,
 		Maxlinks:   helpers.DefaultLinksPerBlock,
 		NoCopy:     true,
@@ -591,7 +598,7 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 
 	// TODO: special handling for car files - serve their blocks directly?
 
-	// Split on fixed chunk sizes because rabin won't help much with deduplication since each block is unique, being a
+	// Split on fixed chunk sizes. Rabin won't help much with deduplication since each block is unique, being a
 	// reference to part of a distinct file.
 	chnk := chunk.NewSizeSplitter(r, DefaultBlockSize)
 	dbh, err := dbp.New(chnk)
@@ -620,11 +627,16 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 }
 
 func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node) error {
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return fmt.Errorf("mfs unavailable")
+	}
+
 	mfsDir := filepath.Dir(mfsPath)
 	baseName := filepath.Base(mfsPath)
 
 	// Remove existing if it exists
-	_, err := mfs.Lookup(p.mfsRoot, mfsPath)
+	_, err := mfs.Lookup(mfsRoot, mfsPath)
 	if err == nil {
 		// No error so file must exists and we need to remove it
 		dir, err := p.lookupDir(mfsDir)
@@ -648,7 +660,7 @@ func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node)
 		CidBuilder: p.builder,
 	}
 
-	if err := mfs.Mkdir(p.mfsRoot, mfsDir, dirOpts); err != nil {
+	if err := mfs.Mkdir(mfsRoot, mfsDir, dirOpts); err != nil {
 		return fmt.Errorf("mkdir %s: %w", mfsDir, err)
 	}
 
@@ -662,7 +674,7 @@ func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node)
 		return fmt.Errorf("add child %s: %w", baseName, err)
 	}
 
-	if _, err := mfs.FlushPath(context.TODO(), p.mfsRoot, mfsPath); err != nil {
+	if _, err := mfs.FlushPath(context.TODO(), mfsRoot, mfsPath); err != nil {
 		return fmt.Errorf("flush path %s: %w", mfsPath, err)
 	}
 
@@ -670,7 +682,12 @@ func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node)
 }
 
 func (p *Peer) lookupDir(mfsDir string) (*mfs.Directory, error) {
-	di, err := mfs.Lookup(p.mfsRoot, mfsDir)
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return nil, fmt.Errorf("mfs unavailable")
+	}
+
+	di, err := mfs.Lookup(mfsRoot, mfsDir)
 	if err != nil {
 		return nil, err
 	}
@@ -684,7 +701,12 @@ func (p *Peer) lookupDir(mfsDir string) (*mfs.Directory, error) {
 }
 
 func (p *Peer) rootCid() (cid.Cid, error) {
-	node, err := p.mfsRoot.GetDirectory().GetNode()
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return cid.Undef, fmt.Errorf("mfs unavailable")
+	}
+
+	node, err := mfsRoot.GetDirectory().GetNode()
 	if err != nil {
 		return cid.Undef, fmt.Errorf("get node: %s", err)
 	}
@@ -693,7 +715,12 @@ func (p *Peer) rootCid() (cid.Cid, error) {
 }
 
 func (p *Peer) fileExists(ctx context.Context, mfsPath string) (bool, cid.Cid, error) {
-	fsn, err := mfs.Lookup(p.mfsRoot, mfsPath)
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return false, cid.Undef, fmt.Errorf("mfs unavailable")
+	}
+
+	fsn, err := mfs.Lookup(mfsRoot, mfsPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, cid.Undef, nil
