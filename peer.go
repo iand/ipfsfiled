@@ -376,7 +376,6 @@ func (p *Peer) setupLibp2p() error {
 	}
 
 	h, err := libp2p.New(
-		context.TODO(),
 		finalOpts...,
 	)
 	if err != nil {
@@ -392,21 +391,21 @@ func (p *Peer) setupLibp2p() error {
 func (p *Peer) setupMfs() error {
 	dsk := datastore.NewKey("/local/filesroot")
 	pf := func(ctx context.Context, c cid.Cid) error {
-		if err := p.store.Sync(blockstore.BlockPrefix); err != nil {
+		if err := p.store.Sync(ctx, blockstore.BlockPrefix); err != nil {
 			return err
 		}
-		if err := p.store.Sync(filestore.FilestorePrefix); err != nil {
+		if err := p.store.Sync(ctx, filestore.FilestorePrefix); err != nil {
 			return err
 		}
 
-		if err := p.store.Put(dsk, c.Bytes()); err != nil {
+		if err := p.store.Put(ctx, dsk, c.Bytes()); err != nil {
 			return err
 		}
-		return p.store.Sync(dsk)
+		return p.store.Sync(ctx, dsk)
 	}
 
 	var nd *merkledag.ProtoNode
-	val, err := p.store.Get(dsk)
+	val, err := p.store.Get(context.TODO(), dsk)
 
 	switch {
 	case err == datastore.ErrNotFound || val == nil:
@@ -483,7 +482,7 @@ func (p *Peer) Sync(ctx context.Context) error {
 // removeOrphanedBlocks removes blocks from the filestore that do not correspond to valid files.
 func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 	logger.Infow("scanning for orphaned blocks")
-	next, err := filestore.VerifyAll(p.bstore, true)
+	next, err := filestore.VerifyAll(ctx, p.bstore, true)
 	if err != nil {
 		return err
 	}
@@ -497,7 +496,7 @@ func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 		default:
 		}
 
-		r := next()
+		r := next(ctx)
 		if r == nil {
 			break
 		}
@@ -510,7 +509,7 @@ func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 	}
 
 	return deleteSet.ForEach(func(c cid.Cid) error {
-		if err := p.bstore.DeleteBlock(c); err != nil {
+		if err := p.bstore.DeleteBlock(ctx, c); err != nil {
 			logger.Errorf("failed to delete block '%s': %v", c.String(), err)
 		}
 		return nil
