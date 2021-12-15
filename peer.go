@@ -489,6 +489,7 @@ func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 
 	deleteSet := cid.NewSet()
 
+	blocksScanned := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -499,6 +500,11 @@ func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 		r := next(ctx)
 		if r == nil {
 			break
+		}
+
+		blocksScanned++
+		if blocksScanned%50000 == 0 {
+			logger.Debugw("scanning for orphaned blocks", "scanned", blocksScanned)
 		}
 
 		if r.Status == filestore.StatusOk {
@@ -531,6 +537,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		return fmt.Errorf("mfs unavailable")
 	}
 
+	filesScanned := 0
 	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, err error) error {
 		select {
 		case <-ctx.Done():
@@ -541,6 +548,11 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		if di.Type() != 0 {
 			// non-file
 			return nil
+		}
+
+		filesScanned++
+		if filesScanned%1000 == 0 {
+			logger.Debugw("scanning filesystem files", "scanned", filesScanned)
 		}
 
 		relPath, err := filepath.Rel(p.fileSystemPath, path)
