@@ -27,7 +27,7 @@ require (
 	github.com/ipfs/go-ipns v0.1.2
 	github.com/ipfs/go-log/v2 v2.4.0
 	github.com/ipfs/go-merkledag v0.5.1
-	github.com/ipfs/go-mfs v0.1.2
+	github.com/ipfs/go-mfs v0.2.1
 	github.com/ipfs/go-unixfs v0.3.1
 	github.com/ipld/go-ipld-prime v0.14.2 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
@@ -51,6 +51,3 @@ require (
 	golang.org/x/tools v0.1.8 // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
-
-// See https://github.com/ipfs/go-mfs/pull/88
-replace github.com/ipfs/go-mfs => github.com/ipfs/go-mfs v0.1.3-0.20210507195338-96fbfa122164
