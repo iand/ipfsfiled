@@ -525,6 +525,12 @@ func (p *Peer) removeOrphanedFiles(ctx context.Context) error {
 
 func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 	logger.Infow("ensuring filesystem files are present in blockstore")
+
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return fmt.Errorf("mfs unavailable")
+	}
+
 	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, err error) error {
 		select {
 		case <-ctx.Done():
@@ -537,10 +543,45 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 			return nil
 		}
 
-		_, aerr := p.addFile(ctx, path, di)
-		if aerr != nil {
-			return fmt.Errorf("add file: %w", aerr)
+		relPath, err := filepath.Rel(p.fileSystemPath, path)
+		if err != nil {
+			return fmt.Errorf("path not relative to %s: %w", p.fileSystemPath, err)
 		}
+		mfsPath := filepath.Join("/", relPath)
+
+		fsn, err := mfs.Lookup(mfsRoot, mfsPath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				logger.Debugw("adding unindexed file", "path", path)
+				_, aerr := p.addFile(ctx, path, di)
+				if aerr != nil {
+					return fmt.Errorf("add file: %w", aerr)
+				}
+				return nil
+			}
+
+			return fmt.Errorf("mfs lookup: %w", err)
+		}
+
+		modTime, err := mfsModTime(fsn)
+		if err != nil {
+			return fmt.Errorf("read unixfs modtime: %w", err)
+		}
+
+		fi, err := di.Info()
+		if err != nil {
+			return fmt.Errorf("failed to read fileinfo for %q: %w", path, err)
+		}
+
+		if !fi.ModTime().Equal(modTime) {
+			logger.Debugw("updating modified file", "path", path)
+			_, aerr := p.addFile(ctx, path, di)
+			if aerr != nil {
+				return fmt.Errorf("add file: %w", aerr)
+			}
+			return nil
+		}
+
 		return nil
 	})
 }
@@ -807,4 +848,25 @@ func loadOrInitPeerKey(kf string) (crypto.PrivKey, error) {
 		return k, nil
 	}
 	return crypto.UnmarshalPrivateKey(data)
+}
+
+// mfsModTime is a shim until unixfs 1.5 support is added to go-mfs
+func mfsModTime(fnode mfs.FSNode) (time.Time, error) {
+	inode, err := fnode.GetNode()
+	if err != nil {
+		return time.Time{}, fmt.Errorf("get node: %v", err)
+	}
+
+	switch nd := inode.(type) {
+	case *merkledag.ProtoNode:
+		fsn, err := unixfs.FSNodeFromBytes(nd.Data())
+		if err != nil {
+			return time.Time{}, err
+		}
+		return fsn.ModTime(), nil
+	case *merkledag.RawNode:
+		return time.Time{}, nil
+	default:
+		return time.Time{}, fmt.Errorf("unrecognized node type in mfs/file.Size()")
+	}
 }

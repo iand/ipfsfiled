@@ -51,3 +51,6 @@ require (
 	golang.org/x/tools v0.1.8 // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
+
+// See https://github.com/ipfs/go-unixfs/pull/117
+replace github.com/ipfs/go-unixfs => github.com/iand/go-unixfs v0.3.2-0.20211215141107-0be5dde803a9
