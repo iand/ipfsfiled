@@ -503,7 +503,7 @@ func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 		}
 
 		blocksScanned++
-		if blocksScanned%50000 == 0 {
+		if blocksScanned%5000 == 0 {
 			logger.Debugw("scanning for orphaned blocks", "scanned", blocksScanned)
 		}
 
