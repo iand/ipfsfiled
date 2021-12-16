@@ -538,11 +538,16 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 	}
 
 	filesScanned := 0
-	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, err error) error {
+	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, rerr error) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+		}
+
+		if rerr != nil {
+			logger.Errorw("failed to walk file", "error", rerr, "path", path)
+			return nil // don't abort the entire walk
 		}
 
 		if di.Type() != 0 {
@@ -565,33 +570,37 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				logger.Debugw("adding unindexed file", "path", path)
-				_, aerr := p.addFile(ctx, path, di)
-				if aerr != nil {
-					return fmt.Errorf("add file: %w", aerr)
+				_, err := p.addFile(ctx, path, di)
+				if err != nil {
+					logger.Errorw("failed to add file to mfs", "error", err, "path", path)
+					return nil // don't abort the entire walk
 				}
 				return nil
 			}
 
-			return fmt.Errorf("mfs lookup: %w", err)
-		}
-
-		modTime, err := mfsModTime(fsn)
-		if err != nil {
-			return fmt.Errorf("read unixfs modtime: %w", err)
+			logger.Errorw("failed to lookup file in mfs", "error", err, "mfs_path", mfsPath)
+			return nil // don't abort the entire walk
 		}
 
 		fi, err := di.Info()
 		if err != nil {
-			return fmt.Errorf("failed to read fileinfo for %q: %w", path, err)
+			logger.Errorw("failed to read fileinfo for file", "error", err, "path", path)
+			return nil // don't abort the entire walk
+		}
+
+		modTime, err := mfsModTime(fsn)
+		if err != nil {
+			logger.Errorw("failed to read modtime for mfs file", "error", err, "mfs_path", mfsPath)
+			return nil // don't abort the entire walk
 		}
 
 		if !fi.ModTime().Equal(modTime) {
 			logger.Debugw("updating modified file", "path", path)
-			_, aerr := p.addFile(ctx, path, di)
-			if aerr != nil {
-				return fmt.Errorf("add file: %w", aerr)
+			_, err := p.addFile(ctx, path, di)
+			if err != nil {
+				logger.Errorw("failed to add file to mfs", "error", err, "path", path)
+				return nil // don't abort the entire walk
 			}
-			return nil
 		}
 
 		return nil
