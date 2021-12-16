@@ -2,16 +2,36 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/pprof"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/prometheus"
 	logging "github.com/ipfs/go-log/v2"
+	metricsprom "github.com/ipfs/go-metrics-prometheus"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/urfave/cli/v2"
+	"go.opencensus.io/stats/view"
 )
 
 func configure(_ *cli.Context) error {
 	if err := logging.SetLogLevel("ipfsfiled", loggingConfig.level); err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
+
+	if diagnosticsConfig.debugAddr != "" {
+		if err := startDebugServer(); err != nil {
+			return fmt.Errorf("start debug server: %w", err)
+		}
+	}
+
+	if diagnosticsConfig.prometheusAddr != "" {
+		if err := startPrometheusServer(); err != nil {
+			return fmt.Errorf("start prometheus server: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -108,6 +128,89 @@ var (
 	}
 )
 
+var (
+	diagnosticsConfig struct {
+		debugAddr      string
+		prometheusAddr string
+	}
+
+	diagnosticsFlags = []cli.Flag{
+		&cli.StringFlag{
+			Name:        "debug-addr",
+			Usage:       "Network address to start a debug http server on (example: 127.0.0.1:8080)",
+			Value:       "",
+			Destination: &diagnosticsConfig.debugAddr,
+		},
+		&cli.StringFlag{
+			Name:        "prometheus-addr",
+			Usage:       "Network address to start a prometheus metric exporter server on (example: :9991)",
+			Value:       "",
+			Destination: &diagnosticsConfig.prometheusAddr,
+		},
+	}
+)
+
 const (
 	DefaultBlockSize = 1 << 20 // 1MiB
 )
+
+func startPrometheusServer() error {
+	// setup Prometheus
+	registry := prom.NewRegistry()
+	goCollector := collectors.NewGoCollector()
+	procCollector := collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})
+	registry.MustRegister(goCollector, procCollector)
+	pe, err := prometheus.NewExporter(prometheus.Options{
+		Namespace: "ipfsfiled",
+		Registry:  registry,
+	})
+	if err != nil {
+		return fmt.Errorf("new prometheus exporter: %w", err)
+	}
+
+	// register prometheus with opencensus
+	view.RegisterExporter(pe)
+	view.SetReportingPeriod(2 * time.Second)
+
+	// register the metrics views of interest
+	if err := view.Register(metricViews...); err != nil {
+		return fmt.Errorf("register views: %w", err)
+	}
+
+	// some libraries like ipfs/go-ds-measure and ipfs/go-ipfs-blockstore
+	// use ipfs/go-metrics-interface. This injects a Prometheus exporter
+	// for those. Metrics are exported to the default registry.
+	if err := metricsprom.Inject(); err != nil {
+		logger.Errorw("unable to inject prometheus ipfs/go-metrics exporter; some metrics will be unavailable", "error", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", pe)
+	go func() {
+		if err := http.ListenAndServe(diagnosticsConfig.prometheusAddr, mux); err != nil {
+			logger.Errorw("prometheus server failed", "error", err)
+		}
+	}()
+	return nil
+}
+
+func startDebugServer() error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+
+	go func() {
+		if err := http.ListenAndServe(diagnosticsConfig.debugAddr, mux); err != nil {
+			logger.Errorw("debug server failed", "error", err)
+		}
+	}()
+	return nil
+}

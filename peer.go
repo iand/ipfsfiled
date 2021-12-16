@@ -458,16 +458,19 @@ func (p *Peer) Sync(ctx context.Context) error {
 	logger.Infow("starting filesystem sync")
 	// ensure mfs only contains files that are under the file system root
 	if err := p.removeOrphanedFiles(ctx); err != nil {
+		incMeasure(ctx, syncErrorsMeasure)
 		return fmt.Errorf("ensure orphaned files: %w", err)
 	}
 
 	// ensure all files under the file system root are in the filestore and mfs
 	if err := p.ensureFilesIndexed(ctx); err != nil {
+		incMeasure(ctx, syncErrorsMeasure)
 		return fmt.Errorf("ensure files indexed: %w", err)
 	}
 
 	// provide the mfs root on the dht and ipns
 	if err := p.announceMfsRoot(ctx); err != nil {
+		incMeasure(ctx, syncErrorsMeasure)
 		return fmt.Errorf("announce mfs root: %w", err)
 	}
 
@@ -479,12 +482,12 @@ func (p *Peer) GarbageCollect(ctx context.Context) error {
 	logger.Infow("starting garbage collection")
 	next, err := filestore.VerifyAll(ctx, p.bstore, true)
 	if err != nil {
+		incMeasure(ctx, gcErrorsMeasure)
 		return err
 	}
 
 	deleteSet := cid.NewSet()
 
-	blocksScanned := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -497,20 +500,19 @@ func (p *Peer) GarbageCollect(ctx context.Context) error {
 			break
 		}
 
-		blocksScanned++
-		if blocksScanned%5000 == 0 {
-			logger.Debugw("scanning for orphaned blocks", "scanned", blocksScanned)
-		}
+		incMeasure(ctx, blocksScannedMeasure)
 
 		if r.Status == filestore.StatusOk {
 			continue
 		}
 		deleteSet.Visit(r.Key)
 		logger.Debugw("orphaned block", "cid", r.Key, "status", r.Status, "error", r.ErrorMsg, "filepath", r.FilePath, "offset", r.Offset, "size", r.Size)
+		incMeasure(ctx, blocksOrphanedMeasure)
 	}
 
 	return deleteSet.ForEach(func(c cid.Cid) error {
 		if err := p.bstore.DeleteBlock(ctx, c); err != nil {
+			incMeasure(ctx, gcErrorsMeasure)
 			logger.Errorf("failed to delete block '%s': %v", c.String(), err)
 		}
 		return nil
@@ -532,7 +534,11 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		return fmt.Errorf("mfs unavailable")
 	}
 
-	filesScanned := 0
+	filesSynced := int64(0)
+	defer func() {
+		setMeasure(ctx, filesSyncedMeasure, filesSynced)
+	}()
+
 	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, rerr error) error {
 		select {
 		case <-ctx.Done():
@@ -550,10 +556,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 			return nil
 		}
 
-		filesScanned++
-		if filesScanned%1000 == 0 {
-			logger.Debugw("scanning filesystem files", "scanned", filesScanned)
-		}
+		incMeasure(ctx, filesScannedMeasure)
 
 		relPath, err := filepath.Rel(p.fileSystemPath, path)
 		if err != nil {
@@ -597,6 +600,8 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 				return nil // don't abort the entire walk
 			}
 		}
+
+		filesSynced++
 
 		return nil
 	})

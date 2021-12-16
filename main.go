@@ -39,6 +39,7 @@ var app = &cli.App{
 		loggingFlags,
 		ipfsFlags,
 		scheduleFlags,
+		diagnosticsFlags,
 	),
 	Before: configure,
 	Action: func(cctx *cli.Context) error {

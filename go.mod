@@ -3,6 +3,7 @@ module github.com/iand/ipfsfiled
 go 1.16
 
 require (
+	contrib.go.opencensus.io/exporter/prometheus v0.4.0
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.4 // indirect
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
@@ -27,6 +28,7 @@ require (
 	github.com/ipfs/go-ipns v0.1.2
 	github.com/ipfs/go-log/v2 v2.4.0
 	github.com/ipfs/go-merkledag v0.5.1
+	github.com/ipfs/go-metrics-prometheus v0.0.2
 	github.com/ipfs/go-mfs v0.2.1
 	github.com/ipfs/go-unixfs v0.3.1
 	github.com/ipld/go-ipld-prime v0.14.2 // indirect
@@ -41,9 +43,11 @@ require (
 	github.com/multiformats/go-multiaddr v0.4.1
 	github.com/multiformats/go-multihash v0.1.0
 	github.com/onsi/ginkgo v1.16.5 // indirect
+	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/whyrusleeping/cbor-gen v0.0.0-20211110122933-f57984553008 // indirect
+	go.opencensus.io v0.23.0
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/crypto v0.0.0-20211209193657-4570a0811e8b // indirect
 	golang.org/x/net v0.0.0-20211209124913-491a49abca63 // indirect
