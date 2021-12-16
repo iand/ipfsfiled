@@ -161,7 +161,7 @@ func startPrometheusServer() error {
 	procCollector := collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})
 	registry.MustRegister(goCollector, procCollector)
 	pe, err := prometheus.NewExporter(prometheus.Options{
-		Namespace: "ipfsfiled",
+		Namespace: appName,
 		Registry:  registry,
 	})
 	if err != nil {

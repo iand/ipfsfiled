@@ -30,6 +30,7 @@ import (
 	ipld "github.com/ipfs/go-ipld-format"
 	ipns "github.com/ipfs/go-ipns"
 	"github.com/ipfs/go-merkledag"
+	metricsif "github.com/ipfs/go-metrics-interface"
 	"github.com/ipfs/go-mfs"
 	"github.com/ipfs/go-unixfs"
 	"github.com/ipfs/go-unixfs/importer/helpers"
@@ -104,6 +105,9 @@ type Peer struct {
 }
 
 func NewPeer(cfg *PeerConfig) (*Peer, error) {
+	// Create a temporary context to hold metrics metadata
+	ctx := metricsif.CtxScope(context.Background(), appName)
+
 	p := new(Peer)
 
 	if err := p.applyConfig(cfg); err != nil {
@@ -114,24 +118,24 @@ func NewPeer(cfg *PeerConfig) (*Peer, error) {
 		return nil, fmt.Errorf("setup datastore: %w", err)
 	}
 
-	if err := p.setupBlockstore(); err != nil {
+	if err := p.setupBlockstore(ctx); err != nil {
 		return nil, fmt.Errorf("setup blockstore: %w", err)
 	}
 
 	if !p.offline {
-		if err := p.setupLibp2p(); err != nil {
+		if err := p.setupLibp2p(ctx); err != nil {
 			return nil, fmt.Errorf("setup libp2p: %w", err)
 		}
-		if err := p.bootstrap(BootstrapPeers); err != nil {
+		if err := p.bootstrap(ctx, BootstrapPeers); err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
 	}
 
-	if err := p.setupBlockService(); err != nil {
+	if err := p.setupBlockService(ctx); err != nil {
 		return nil, fmt.Errorf("setup blockservice: %w", err)
 	}
 
-	if err := p.setupReprovider(); err != nil {
+	if err := p.setupReprovider(ctx); err != nil {
 		return nil, fmt.Errorf("setup reprovider: %w", err)
 	}
 
@@ -140,7 +144,7 @@ func NewPeer(cfg *PeerConfig) (*Peer, error) {
 		return nil, fmt.Errorf("setup dagservice: %w", err)
 	}
 
-	if err := p.setupMfs(); err != nil {
+	if err := p.setupMfs(ctx); err != nil {
 		p.Close()
 		return nil, fmt.Errorf("setup mfs: %w", err)
 	}
@@ -240,7 +244,7 @@ func (p *Peer) setupDatastore() error {
 	return nil
 }
 
-func (p *Peer) setupBlockstore() error {
+func (p *Peer) setupBlockstore(ctx context.Context) error {
 	logger.Debug("setting up ipfs blockstore")
 
 	fm := filestore.NewFileManager(p.store, p.fileSystemPath)
@@ -248,7 +252,7 @@ func (p *Peer) setupBlockstore() error {
 
 	bs := blockstore.NewBlockstore(p.store)
 	bs = blockstore.NewIdStore(bs)
-	cachedbs, err := blockstore.CachedBlockstore(context.TODO(), bs, blockstore.DefaultCacheOpts())
+	cachedbs, err := blockstore.CachedBlockstore(ctx, bs, blockstore.DefaultCacheOpts())
 	if err != nil {
 		return fmt.Errorf("new cached blockstore: %w", err)
 	}
@@ -257,7 +261,7 @@ func (p *Peer) setupBlockstore() error {
 	return nil
 }
 
-func (p *Peer) setupBlockService() error {
+func (p *Peer) setupBlockService(ctx context.Context) error {
 	logger.Debug("setting up ipfs block service")
 	if p.offline {
 		p.bserv = blockservice.New(p.bstore, offline.Exchange(p.bstore))
@@ -265,7 +269,7 @@ func (p *Peer) setupBlockService() error {
 	}
 
 	bswapnet := network.NewFromIpfsHost(p.host, p.dht)
-	bswap := bitswap.New(context.TODO(), bswapnet, p.bstore)
+	bswap := bitswap.New(ctx, bswapnet, p.bstore)
 
 	bserv := blockservice.New(p.bstore, bswap)
 	p.mu.Lock()
@@ -280,26 +284,26 @@ func (p *Peer) setupDAGService() error {
 	return nil
 }
 
-func (p *Peer) setupReprovider() error {
+func (p *Peer) setupReprovider(ctx context.Context) error {
 	logger.Debug("setting up reprovider")
 	if p.offline || p.reprovideInterval < 0 {
 		p.reprovider = provider.NewOfflineProvider()
 		return nil
 	}
 
-	queue, err := queue.NewQueue(context.TODO(), "repro", p.store)
+	queue, err := queue.NewQueue(ctx, "repro", p.store)
 	if err != nil {
 		return err
 	}
 
 	prov := simple.NewProvider(
-		context.TODO(),
+		ctx,
 		queue,
 		p.dht,
 	)
 
 	reprov := simple.NewReprovider(
-		context.TODO(),
+		ctx,
 		p.reprovideInterval,
 		p.dht,
 		simple.NewBlockstoreProvider(p.bstore),
@@ -315,7 +319,7 @@ func (p *Peer) setupReprovider() error {
 	return nil
 }
 
-func (p *Peer) bootstrap(peers []peer.AddrInfo) error {
+func (p *Peer) bootstrap(ctx context.Context, peers []peer.AddrInfo) error {
 	logger.Info("bootstrapping ipfs node")
 	connected := make(chan struct{}, len(peers))
 
@@ -325,7 +329,7 @@ func (p *Peer) bootstrap(peers []peer.AddrInfo) error {
 		wg.Add(1)
 		go func(pinfo peer.AddrInfo) {
 			defer wg.Done()
-			err := p.host.Connect(context.TODO(), pinfo)
+			err := p.host.Connect(ctx, pinfo)
 			if err != nil {
 				logger.Warn(err)
 				return
@@ -355,7 +359,7 @@ func (p *Peer) bootstrap(peers []peer.AddrInfo) error {
 	return nil
 }
 
-func (p *Peer) setupLibp2p() error {
+func (p *Peer) setupLibp2p(ctx context.Context) error {
 	var ddht *dualdht.DHT
 	var err error
 
@@ -363,7 +367,7 @@ func (p *Peer) setupLibp2p() error {
 		libp2p.Identity(p.peerKey),
 		libp2p.ListenAddrs(p.listenAddr),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			ddht, err = newDHT(context.TODO(), h, p.store)
+			ddht, err = newDHT(ctx, h, p.store)
 			return ddht, err
 		}),
 		libp2p.NATPortMap(),
@@ -387,7 +391,7 @@ func (p *Peer) setupLibp2p() error {
 	return nil
 }
 
-func (p *Peer) setupMfs() error {
+func (p *Peer) setupMfs(ctx context.Context) error {
 	dsk := datastore.NewKey("/local/filesroot")
 	pf := func(ctx context.Context, c cid.Cid) error {
 		if err := p.store.Sync(ctx, blockstore.BlockPrefix); err != nil {
@@ -404,12 +408,12 @@ func (p *Peer) setupMfs() error {
 	}
 
 	var nd *merkledag.ProtoNode
-	val, err := p.store.Get(context.TODO(), dsk)
+	val, err := p.store.Get(ctx, dsk)
 
 	switch {
 	case err == datastore.ErrNotFound || val == nil:
 		nd = unixfs.EmptyDirNode()
-		err := p.dag.Add(context.TODO(), nd)
+		err := p.dag.Add(ctx, nd)
 		if err != nil {
 			return fmt.Errorf("write root: %w", err)
 		}
@@ -419,7 +423,7 @@ func (p *Peer) setupMfs() error {
 			return fmt.Errorf("cast root cid: %w", err)
 		}
 
-		rnd, err := p.dag.Get(context.TODO(), c)
+		rnd, err := p.dag.Get(ctx, c)
 		if err != nil {
 			return fmt.Errorf("get root: %w", err)
 		}
@@ -434,7 +438,7 @@ func (p *Peer) setupMfs() error {
 		return err
 	}
 
-	root, err := mfs.NewRoot(context.TODO(), p.dag, nd, pf)
+	root, err := mfs.NewRoot(ctx, p.dag, nd, pf)
 	if err != nil {
 		return fmt.Errorf("new root: %w", err)
 	}
@@ -734,7 +738,7 @@ func (p *Peer) addFileToMfs(ctx context.Context, mfsPath string, node ipld.Node)
 		return fmt.Errorf("add child %s: %w", baseName, err)
 	}
 
-	if _, err := mfs.FlushPath(context.TODO(), mfsRoot, mfsPath); err != nil {
+	if _, err := mfs.FlushPath(ctx, mfsRoot, mfsPath); err != nil {
 		return fmt.Errorf("flush path %s: %w", mfsPath, err)
 	}
 

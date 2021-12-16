@@ -31,8 +31,10 @@ func main() {
 	}
 }
 
+const appName = "ipfsfiled"
+
 var app = &cli.App{
-	Name:    "ipfsfiled",
+	Name:    appName,
 	Usage:   "watches a filesystem and serves its files over ipfs",
 	Version: version,
 	Flags: flagSet(
@@ -43,6 +45,7 @@ var app = &cli.App{
 	),
 	Before: configure,
 	Action: func(cctx *cli.Context) error {
+		ctx := cctx.Context
 		p, err := NewPeer(&PeerConfig{
 			ListenAddr:     ipfsConfig.listenAddr,
 			DatastorePath:  ipfsConfig.datastorePath,
@@ -72,7 +75,7 @@ var app = &cli.App{
 		}
 
 		// Perform initial sync
-		if err := p.Sync(cctx.Context); err != nil {
+		if err := p.Sync(ctx); err != nil {
 			logger.Errorf("sync failure: %v", err)
 		}
 
@@ -82,11 +85,11 @@ var app = &cli.App{
 			case <-cctx.Context.Done():
 				return nil
 			case <-syncChan:
-				if err := p.Sync(cctx.Context); err != nil {
+				if err := p.Sync(ctx); err != nil {
 					logger.Errorf("sync failure: %v", err)
 				}
 			case <-gcChan:
-				if err := p.GarbageCollect(cctx.Context); err != nil {
+				if err := p.GarbageCollect(ctx); err != nil {
 					logger.Errorf("garbage collection failure: %v", err)
 				}
 			}
