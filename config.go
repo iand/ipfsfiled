@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/urfave/cli/v2"
@@ -81,6 +82,28 @@ var (
 			Usage:       "When true, don't connect to the public ipfs dht.",
 			Value:       false,
 			Destination: &ipfsConfig.offline,
+		},
+	}
+)
+
+var (
+	scheduleConfig struct {
+		syncInterval              time.Duration
+		garbageCollectionInterval time.Duration
+	}
+
+	scheduleFlags = []cli.Flag{
+		&cli.DurationFlag{
+			Name:        "sync-interval",
+			Usage:       "Controls how frequently the filesystem should be scanned to keep the unixfs representation in sync.",
+			Value:       15 * time.Minute,
+			Destination: &scheduleConfig.syncInterval,
+		},
+		&cli.DurationFlag{
+			Name:        "gc-interval",
+			Usage:       "Controls how frequently the ipfs blockstore should be garbage collected to remove orphaned blocks.",
+			Value:       24 * time.Hour,
+			Destination: &scheduleConfig.garbageCollectionInterval,
 		},
 	}
 )

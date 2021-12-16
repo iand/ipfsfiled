@@ -229,7 +229,7 @@ func (p *Peer) applyConfig(cfg *PeerConfig) error {
 }
 
 func (p *Peer) setupDatastore() error {
-	logger.Infof("setting up ipfs datastore at %s", p.datastorePath)
+	logger.Debugf("setting up ipfs datastore at %s", p.datastorePath)
 	opts := badger.DefaultOptions
 
 	ds, err := badger.NewDatastore(p.datastorePath, &opts)
@@ -241,7 +241,7 @@ func (p *Peer) setupDatastore() error {
 }
 
 func (p *Peer) setupBlockstore() error {
-	logger.Info("setting up ipfs blockstore")
+	logger.Debug("setting up ipfs blockstore")
 
 	fm := filestore.NewFileManager(p.store, p.fileSystemPath)
 	fm.AllowFiles = true
@@ -258,7 +258,7 @@ func (p *Peer) setupBlockstore() error {
 }
 
 func (p *Peer) setupBlockService() error {
-	logger.Info("setting up ipfs block service")
+	logger.Debug("setting up ipfs block service")
 	if p.offline {
 		p.bserv = blockservice.New(p.bstore, offline.Exchange(p.bstore))
 		return nil
@@ -281,7 +281,7 @@ func (p *Peer) setupDAGService() error {
 }
 
 func (p *Peer) setupReprovider() error {
-	logger.Info("setting up reprovider")
+	logger.Debug("setting up reprovider")
 	if p.offline || p.reprovideInterval < 0 {
 		p.reprovider = provider.NewOfflineProvider()
 		return nil
@@ -455,11 +455,7 @@ func (p *Peer) getMfsRoot() *mfs.Root {
 
 // Sync ensures that the underlying blockstore accurately represents the filesystem the peer is monitoring.
 func (p *Peer) Sync(ctx context.Context) error {
-	// ensure filestore does not contain orphaned blocks
-	if err := p.removeOrphanedBlocks(ctx); err != nil {
-		return fmt.Errorf("remove orphaned blocks: %w", err)
-	}
-
+	logger.Infow("starting filesystem sync")
 	// ensure mfs only contains files that are under the file system root
 	if err := p.removeOrphanedFiles(ctx); err != nil {
 		return fmt.Errorf("ensure orphaned files: %w", err)
@@ -478,9 +474,9 @@ func (p *Peer) Sync(ctx context.Context) error {
 	return nil
 }
 
-// removeOrphanedBlocks removes blocks from the filestore that do not correspond to valid files.
-func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
-	logger.Infow("scanning for orphaned blocks")
+// GarbageCollect removes blocks from the filestore that do not correspond to valid files.
+func (p *Peer) GarbageCollect(ctx context.Context) error {
+	logger.Infow("starting garbage collection")
 	next, err := filestore.VerifyAll(ctx, p.bstore, true)
 	if err != nil {
 		return err
@@ -523,13 +519,13 @@ func (p *Peer) removeOrphanedBlocks(ctx context.Context) error {
 
 // removeOrphanedFiles removes files from mfs that do not correspond to valid files.
 func (p *Peer) removeOrphanedFiles(ctx context.Context) error {
-	logger.Infow("scanning for orphaned files (not implemented yet)")
+	logger.Debugw("scanning for orphaned files (not implemented yet)")
 	// TODO: implement
 	return nil
 }
 
 func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
-	logger.Infow("ensuring filesystem files are present in blockstore")
+	logger.Debugw("ensuring filesystem files are present in blockstore")
 
 	mfsRoot := p.getMfsRoot()
 	if mfsRoot == nil {
@@ -607,12 +603,11 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 }
 
 func (p *Peer) announceMfsRoot(ctx context.Context) error {
-	logger.Infow("announcing mfs root")
 	rootCid, err := p.rootCid()
 	if err != nil {
 		return fmt.Errorf("get mfs root cid: %s", err)
 	}
-	logger.Debugw("updated mfs root", "cid", rootCid.String())
+	logger.Infow("current mfs root", "cid", rootCid.String())
 
 	if err := p.dht.Provide(ctx, rootCid, true); err != nil {
 		return fmt.Errorf("provide mfs root: %w", err)

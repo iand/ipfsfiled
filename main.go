@@ -38,6 +38,7 @@ var app = &cli.App{
 	Flags: flagSet(
 		loggingFlags,
 		ipfsFlags,
+		scheduleFlags,
 	),
 	Before: configure,
 	Action: func(cctx *cli.Context) error {
@@ -53,20 +54,39 @@ var app = &cli.App{
 		}
 		defer p.Close()
 
+		var syncChan <-chan time.Time
+		if scheduleConfig.syncInterval > 0 {
+			syncScheduler := time.NewTicker(scheduleConfig.syncInterval)
+			syncChan = syncScheduler.C
+		} else {
+			logger.Info("scheduled filesystem sync is disabled")
+		}
+
+		var gcChan <-chan time.Time
+		if scheduleConfig.garbageCollectionInterval > 0 {
+			gcScheduler := time.NewTicker(scheduleConfig.garbageCollectionInterval)
+			gcChan = gcScheduler.C
+		} else {
+			logger.Info("scheduled garbage collection is disabled")
+		}
+
 		// Perform initial sync
 		if err := p.Sync(cctx.Context); err != nil {
 			logger.Errorf("sync failure: %v", err)
 		}
 
 		// TODO: fsnotify support to augment polling
-		syncScheduler := time.NewTicker(time.Minute * 5)
 		for {
 			select {
 			case <-cctx.Context.Done():
 				return nil
-			case <-syncScheduler.C:
+			case <-syncChan:
 				if err := p.Sync(cctx.Context); err != nil {
 					logger.Errorf("sync failure: %v", err)
+				}
+			case <-gcChan:
+				if err := p.GarbageCollect(cctx.Context); err != nil {
+					logger.Errorf("garbage collection failure: %v", err)
 				}
 			}
 		}
