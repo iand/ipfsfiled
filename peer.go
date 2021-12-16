@@ -97,11 +97,10 @@ type Peer struct {
 	dag    ipld.DAGService // (consider ipld.BufferedDAG)
 	bstore *filestore.Filestore
 
-	mu          sync.Mutex // guards writes to bserv, reprovider and mfsRoot fields
-	bserv       blockservice.BlockService
-	reprovider  provider.System
-	mfsRoot     *mfs.Root
-	fileManager *filestore.FileManager
+	mu         sync.Mutex // guards writes to bserv, reprovider and mfsRoot fields
+	bserv      blockservice.BlockService
+	reprovider provider.System
+	mfsRoot    *mfs.Root
 }
 
 func NewPeer(cfg *PeerConfig) (*Peer, error) {
@@ -773,28 +772,6 @@ func (p *Peer) rootCid() (cid.Cid, error) {
 	}
 
 	return node.Cid(), nil
-}
-
-func (p *Peer) fileExists(ctx context.Context, mfsPath string) (bool, cid.Cid, error) {
-	mfsRoot := p.getMfsRoot()
-	if mfsRoot == nil {
-		return false, cid.Undef, fmt.Errorf("mfs unavailable")
-	}
-
-	fsn, err := mfs.Lookup(mfsRoot, mfsPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, cid.Undef, nil
-		}
-		return false, cid.Undef, fmt.Errorf("mfs lookup: %w", err)
-	}
-
-	node, err := fsn.GetNode()
-	if err != nil {
-		return false, cid.Undef, fmt.Errorf("mfs get node: %w", err)
-	}
-
-	return true, node.Cid(), nil
 }
 
 func (p *Peer) logHostAddresses() {
