@@ -30,6 +30,7 @@ import (
 	ipld "github.com/ipfs/go-ipld-format"
 	ipns "github.com/ipfs/go-ipns"
 	"github.com/ipfs/go-merkledag"
+	metrics "github.com/ipfs/go-metrics-interface"
 	metricsif "github.com/ipfs/go-metrics-interface"
 	"github.com/ipfs/go-mfs"
 	"github.com/ipfs/go-unixfs"
@@ -98,6 +99,14 @@ type Peer struct {
 	dag    ipld.DAGService // (consider ipld.BufferedDAG)
 	bstore *filestore.Filestore
 
+	// metrics
+	filesScannedCounter   metrics.Counter
+	filesSyncedGauge      metrics.Gauge
+	blocksScannedCounter  metrics.Counter
+	blocksOrphanedCounter metrics.Counter
+	syncErrorsCounter     metrics.Counter
+	gcErrorsCounter       metrics.Counter
+
 	mu         sync.Mutex // guards writes to bserv, reprovider and mfsRoot fields
 	bserv      blockservice.BlockService
 	reprovider provider.System
@@ -109,6 +118,8 @@ func NewPeer(cfg *PeerConfig) (*Peer, error) {
 	ctx := metricsif.CtxScope(context.Background(), appName)
 
 	p := new(Peer)
+
+	p.setupMetrics(ctx)
 
 	if err := p.applyConfig(cfg); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
@@ -230,6 +241,15 @@ func (p *Peer) applyConfig(cfg *PeerConfig) error {
 	p.builder = &prefix
 
 	return nil
+}
+
+func (p *Peer) setupMetrics(ctx context.Context) {
+	p.filesScannedCounter = metrics.NewCtx(ctx, "files_scanned_total", "Total number of files scanned during a sync").Counter()
+	p.filesSyncedGauge = metrics.NewCtx(ctx, "files_synced", "Current number of files known to be synced to the blockstore").Gauge()
+	p.blocksScannedCounter = metrics.NewCtx(ctx, "blocks_scanned_total", "Total number of blocks in the blockstore scanned during garbage collection").Counter()
+	p.blocksOrphanedCounter = metrics.NewCtx(ctx, "blocks_orphaned_total", "Total number of blocks in the blockstore found to be orphaned during garbage collection").Counter()
+	p.syncErrorsCounter = metrics.NewCtx(ctx, "sync_errors_total", "Total number of errors encountered during a sync").Counter()
+	p.gcErrorsCounter = metrics.NewCtx(ctx, "gc_errors_total", "Total number of errors encountered during garbage collection").Counter()
 }
 
 func (p *Peer) setupDatastore() error {
@@ -462,19 +482,19 @@ func (p *Peer) Sync(ctx context.Context) error {
 	logger.Infow("starting filesystem sync")
 	// ensure mfs only contains files that are under the file system root
 	if err := p.removeOrphanedFiles(ctx); err != nil {
-		incMeasure(ctx, syncErrorsMeasure)
+		p.syncErrorsCounter.Inc()
 		return fmt.Errorf("ensure orphaned files: %w", err)
 	}
 
 	// ensure all files under the file system root are in the filestore and mfs
 	if err := p.ensureFilesIndexed(ctx); err != nil {
-		incMeasure(ctx, syncErrorsMeasure)
+		p.syncErrorsCounter.Inc()
 		return fmt.Errorf("ensure files indexed: %w", err)
 	}
 
 	// provide the mfs root on the dht and ipns
 	if err := p.announceMfsRoot(ctx); err != nil {
-		incMeasure(ctx, syncErrorsMeasure)
+		p.syncErrorsCounter.Inc()
 		return fmt.Errorf("announce mfs root: %w", err)
 	}
 
@@ -486,7 +506,7 @@ func (p *Peer) GarbageCollect(ctx context.Context) error {
 	logger.Infow("starting garbage collection")
 	next, err := filestore.VerifyAll(ctx, p.bstore, true)
 	if err != nil {
-		incMeasure(ctx, gcErrorsMeasure)
+		p.gcErrorsCounter.Inc()
 		return err
 	}
 
@@ -503,20 +523,19 @@ func (p *Peer) GarbageCollect(ctx context.Context) error {
 		if r == nil {
 			break
 		}
-
-		incMeasure(ctx, blocksScannedMeasure)
+		p.blocksScannedCounter.Inc()
 
 		if r.Status == filestore.StatusOk {
 			continue
 		}
 		deleteSet.Visit(r.Key)
 		logger.Debugw("orphaned block", "cid", r.Key, "status", r.Status, "error", r.ErrorMsg, "filepath", r.FilePath, "offset", r.Offset, "size", r.Size)
-		incMeasure(ctx, blocksOrphanedMeasure)
+		p.blocksOrphanedCounter.Inc()
 	}
 
 	return deleteSet.ForEach(func(c cid.Cid) error {
 		if err := p.bstore.DeleteBlock(ctx, c); err != nil {
-			incMeasure(ctx, gcErrorsMeasure)
+			p.gcErrorsCounter.Inc()
 			logger.Errorf("failed to delete block '%s': %v", c.String(), err)
 		}
 		return nil
@@ -538,9 +557,9 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		return fmt.Errorf("mfs unavailable")
 	}
 
-	filesSynced := int64(0)
+	filesSynced := 0
 	defer func() {
-		setMeasure(ctx, filesSyncedMeasure, filesSynced)
+		p.filesSyncedGauge.Set(float64(filesSynced))
 	}()
 
 	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, rerr error) error {
@@ -560,7 +579,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 			return nil
 		}
 
-		incMeasure(ctx, filesScannedMeasure)
+		p.filesScannedCounter.Inc()
 
 		relPath, err := filepath.Rel(p.fileSystemPath, path)
 		if err != nil {

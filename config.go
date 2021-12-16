@@ -10,7 +10,6 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	metricsprom "github.com/ipfs/go-metrics-prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/urfave/cli/v2"
 	"go.opencensus.io/stats/view"
 )
@@ -155,14 +154,15 @@ const (
 )
 
 func startPrometheusServer() error {
-	// setup Prometheus
-	registry := prom.NewRegistry()
-	goCollector := collectors.NewGoCollector()
-	procCollector := collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})
-	registry.MustRegister(goCollector, procCollector)
+	// Bind the ipfs metrics interface to prometheus
+	if err := metricsprom.Inject(); err != nil {
+		logger.Errorw("unable to inject prometheus ipfs/go-metrics exporter; some metrics will be unavailable", "error", err)
+	}
+
 	pe, err := prometheus.NewExporter(prometheus.Options{
-		Namespace: appName,
-		Registry:  registry,
+		Namespace:  appName,
+		Registerer: prom.DefaultRegisterer,
+		Gatherer:   prom.DefaultGatherer,
 	})
 	if err != nil {
 		return fmt.Errorf("new prometheus exporter: %w", err)
@@ -171,18 +171,6 @@ func startPrometheusServer() error {
 	// register prometheus with opencensus
 	view.RegisterExporter(pe)
 	view.SetReportingPeriod(2 * time.Second)
-
-	// register the metrics views of interest
-	if err := view.Register(metricViews...); err != nil {
-		return fmt.Errorf("register views: %w", err)
-	}
-
-	// some libraries like ipfs/go-ds-measure and ipfs/go-ipfs-blockstore
-	// use ipfs/go-metrics-interface. This injects a Prometheus exporter
-	// for those. Metrics are exported to the default registry.
-	if err := metricsprom.Inject(); err != nil {
-		logger.Errorw("unable to inject prometheus ipfs/go-metrics exporter; some metrics will be unavailable", "error", err)
-	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", pe)
