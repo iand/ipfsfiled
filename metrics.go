@@ -27,7 +27,7 @@ var metricViews = []*view.View{
 	},
 
 	{
-		Name:        filesSyncedMeasure.Name() + "_last",
+		Name:        filesSyncedMeasure.Name(),
 		Description: "Current number of files known to be synced to the blockstore",
 		Measure:     filesSyncedMeasure,
 		Aggregation: view.LastValue(),
