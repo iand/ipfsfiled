@@ -150,7 +150,8 @@ var (
 )
 
 const (
-	DefaultBlockSize = 1 << 20 // 1MiB
+	DefaultFirstBlockSize = 4096    // Ensure the first block in the dag is small to optimize listing directory sizes (by go-ipfs, for example)
+	DefaultBlockSize      = 1 << 20 // 1MiB
 )
 
 func startPrometheusServer() error {

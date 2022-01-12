@@ -19,7 +19,7 @@ require (
 	github.com/ipfs/go-ds-badger2 v0.1.2-0.20211203191834-bc6df5c2417c
 	github.com/ipfs/go-filestore v1.1.0
 	github.com/ipfs/go-ipfs-blockstore v1.1.2
-	github.com/ipfs/go-ipfs-chunker v0.0.5
+	github.com/ipfs/go-ipfs-chunker v0.0.5 // indirect
 	github.com/ipfs/go-ipfs-exchange-offline v0.1.1
 	github.com/ipfs/go-ipfs-files v0.0.3
 	github.com/ipfs/go-ipfs-provider v0.7.1
@@ -34,6 +34,7 @@ require (
 	github.com/ipfs/go-unixfs v0.3.1
 	github.com/ipld/go-ipld-prime v0.14.2 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/libp2p/go-buffer-pool v0.0.2
 	github.com/libp2p/go-libp2p v0.17.0
 	github.com/libp2p/go-libp2p-connmgr v0.2.4
 	github.com/libp2p/go-libp2p-core v0.13.0

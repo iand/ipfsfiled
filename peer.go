@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -21,7 +22,6 @@ import (
 	"github.com/ipfs/go-ds-badger2"
 	"github.com/ipfs/go-filestore"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
-	"github.com/ipfs/go-ipfs-chunker"
 	offline "github.com/ipfs/go-ipfs-exchange-offline"
 	files "github.com/ipfs/go-ipfs-files"
 	provider "github.com/ipfs/go-ipfs-provider"
@@ -36,6 +36,7 @@ import (
 	"github.com/ipfs/go-unixfs"
 	"github.com/ipfs/go-unixfs/importer/helpers"
 	"github.com/ipfs/go-unixfs/importer/trickle"
+	pool "github.com/libp2p/go-buffer-pool"
 	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	crypto "github.com/libp2p/go-libp2p-core/crypto"
@@ -681,9 +682,7 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 
 	// TODO: special handling for car files - serve their blocks directly?
 
-	// Split on fixed chunk sizes. Rabin won't help much with deduplication since each block is unique, being a
-	// reference to part of a distinct file.
-	chnk := chunk.NewSizeSplitter(r, DefaultBlockSize)
+	chnk := NewSplitter(r, DefaultFirstBlockSize, DefaultBlockSize)
 	dbh, err := dbp.New(chnk)
 	if err != nil {
 		return nil, fmt.Errorf("new dag builder helper: %w", err)
@@ -890,4 +889,54 @@ func mfsModTime(fnode mfs.FSNode) (time.Time, error) {
 	default:
 		return time.Time{}, fmt.Errorf("unrecognized node type in mfs/file.Size()")
 	}
+}
+
+// A firstBlockSplitter is a splitter that uses one size for the the first chunk and a different size for the remaining
+// chunks.
+type firstBlockSplitter struct {
+	r         io.Reader
+	first     uint32
+	doneFirst bool
+	size      uint32
+	err       error
+}
+
+func NewSplitter(r io.Reader, first, size int64) *firstBlockSplitter {
+	return &firstBlockSplitter{
+		r:     r,
+		first: uint32(first),
+		size:  uint32(size),
+	}
+}
+
+func (s *firstBlockSplitter) NextBytes() ([]byte, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	size := s.size
+	if !s.doneFirst {
+		size = s.first
+		s.doneFirst = true
+	}
+
+	full := pool.Get(int(size))
+	n, err := io.ReadFull(s.r, full)
+	switch err {
+	case io.ErrUnexpectedEOF:
+		s.err = io.EOF
+		small := make([]byte, n)
+		copy(small, full)
+		pool.Put(full)
+		return small, nil
+	case nil:
+		return full, nil
+	default:
+		pool.Put(full)
+		return nil, err
+	}
+}
+
+func (s *firstBlockSplitter) Reader() io.Reader {
+	return s.r
 }
