@@ -59,4 +59,4 @@ require (
 )
 
 // See https://github.com/ipfs/go-unixfs/pull/117
-replace github.com/ipfs/go-unixfs => github.com/iand/go-unixfs v0.3.2-0.20211215141107-0be5dde803a9
+replace github.com/ipfs/go-unixfs => github.com/iand/go-unixfs v0.3.2-0.20220113124813-f455d36c5fd1

@@ -15,7 +15,7 @@ import (
 )
 
 func configure(_ *cli.Context) error {
-	if err := logging.SetLogLevel("ipfsfiled", loggingConfig.level); err != nil {
+	if err := logging.SetLogLevel(appName, loggingConfig.level); err != nil {
 		return fmt.Errorf("invalid log level: %w", err)
 	}
 
@@ -45,7 +45,7 @@ func flagSet(fs ...[]cli.Flag) []cli.Flag {
 }
 
 var (
-	logger = logging.Logger("ipfsfiled")
+	logger = logging.Logger(appName)
 
 	loggingConfig struct {
 		level string
@@ -54,9 +54,9 @@ var (
 	loggingFlags = []cli.Flag{
 		&cli.StringFlag{
 			Name:        "log-level",
-			EnvVars:     []string{"GOLOG_LOG_LEVEL"},
+			EnvVars:     []string{"IPFSFILED_LOG_LEVEL"},
 			Value:       "DEBUG",
-			Usage:       "Set the default log level for all loggers to `LEVEL`",
+			Usage:       "Set the default log level for the " + appName + " logger to `LEVEL`",
 			Destination: &loggingConfig.level,
 		},
 	}
