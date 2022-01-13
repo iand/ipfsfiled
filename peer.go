@@ -617,7 +617,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		}
 
 		if !fi.ModTime().Equal(modTime) {
-			logger.Debugw("updating modified file", "path", path)
+			logger.Debugw("updating modified file", "path", path, "mfs_modtime", modTime, "file_modtime", fi.ModTime())
 			_, err := p.addFile(ctx, path, di)
 			if err != nil {
 				logger.Errorw("failed to add file to mfs", "error", err, "path", path)
