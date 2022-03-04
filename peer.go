@@ -31,7 +31,6 @@ import (
 	ipns "github.com/ipfs/go-ipns"
 	"github.com/ipfs/go-merkledag"
 	metrics "github.com/ipfs/go-metrics-interface"
-	metricsif "github.com/ipfs/go-metrics-interface"
 	"github.com/ipfs/go-mfs"
 	"github.com/ipfs/go-unixfs"
 	"github.com/ipfs/go-unixfs/importer/helpers"
@@ -116,7 +115,7 @@ type Peer struct {
 
 func NewPeer(cfg *PeerConfig) (*Peer, error) {
 	// Create a temporary context to hold metrics metadata
-	ctx := metricsif.CtxScope(context.Background(), appName)
+	ctx := metrics.CtxScope(context.Background(), appName)
 
 	p := new(Peer)
 
