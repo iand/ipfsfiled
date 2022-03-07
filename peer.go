@@ -675,8 +675,8 @@ func (p *Peer) ProvideExistingFiles(ctx context.Context) error {
 		return fmt.Errorf("mfs unavailable")
 	}
 
-	logger.Debug("providing existing files")
 	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
+	count := 0
 	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
 		select {
 		case <-ctx.Done():
@@ -689,11 +689,14 @@ func (p *Peer) ProvideExistingFiles(ctx context.Context) error {
 			if err := p.reprovider.Provide(fde.Cid()); err != nil {
 				return fmt.Errorf("provide file: %w", err)
 			}
+			count++
 		}
 		return nil
 	}); err != nil {
 		return fmt.Errorf("walk: %w", err)
 	}
+
+	logger.Debugf("queued %d files for providing", count)
 
 	return nil
 }
@@ -880,14 +883,6 @@ func (p *Peer) logHostAddresses() {
 }
 
 func (p *Peer) writeManifest(ctx context.Context) error {
-	logger.Debug("writing manifest file")
-
-	f, err := os.OpenFile(p.manifestPath, os.O_RDWR|os.O_CREATE, 0o755)
-	if err != nil {
-		return fmt.Errorf("open manifest file for writing: %s", err)
-	}
-	defer f.Close()
-
 	mfsRoot := p.getMfsRoot()
 	if mfsRoot == nil {
 		return fmt.Errorf("mfs unavailable")
@@ -895,8 +890,26 @@ func (p *Peer) writeManifest(ctx context.Context) error {
 
 	node, err := mfsRoot.GetDirectory().GetNode()
 	if err != nil {
-		return fmt.Errorf("get root node: %s", err)
+		return fmt.Errorf("get root node: %w", err)
 	}
+
+	lastWritten, err := p.readManifestRootCid(ctx)
+	if err != nil {
+		return fmt.Errorf("read manifest root cid: %w", err)
+	}
+
+	if lastWritten == node.Cid().String() {
+		// mfs is unchanged since last time
+		return nil
+	}
+
+	logger.Debug("writing manifest file")
+
+	f, err := os.OpenFile(p.manifestPath, os.O_RDWR|os.O_CREATE, 0o755)
+	if err != nil {
+		return fmt.Errorf("open manifest file for writing: %w", err)
+	}
+	defer f.Close()
 
 	man := &Manifest{
 		RootCid: node.Cid().String(),
@@ -936,6 +949,25 @@ func (p *Peer) writeManifest(ctx context.Context) error {
 
 	logger.Debugf("manifest file written to %s", p.manifestPath)
 	return nil
+}
+
+func (p *Peer) readManifestRootCid(ctx context.Context) (string, error) {
+	f, err := os.Open(p.manifestPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	defer f.Close()
+
+	var man struct {
+		RootCid string `json:"root_cid"`
+	}
+
+	if err := json.NewDecoder(f).Decode(&man); err != nil {
+		return "", fmt.Errorf("decode json: %w", err)
+	}
+
+	logger.Debugf("manifest root cid: %s", man.RootCid)
+	return man.RootCid, nil
 }
 
 func newDHT(ctx context.Context, h host.Host, ds datastore.Batching) (*dualdht.DHT, error) {
