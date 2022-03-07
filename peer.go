@@ -844,7 +844,7 @@ func (p *Peer) logHostAddresses() {
 }
 
 func (p *Peer) writeManifest(ctx context.Context) error {
-	logger.Info("writing manifest file")
+	logger.Debug("writing manifest file")
 
 	f, err := os.OpenFile(p.manifestPath, os.O_RDWR|os.O_CREATE, 0o755)
 	if err != nil {
@@ -894,7 +894,12 @@ func (p *Peer) writeManifest(ctx context.Context) error {
 		return man.Files[a].Path < man.Files[b].Path
 	})
 
-	return json.NewEncoder(f).Encode(man)
+	if err := json.NewEncoder(f).Encode(man); err != nil {
+		return fmt.Errorf("encode json: %w", err)
+	}
+
+	logger.Debugf("manifest file written to %s", p.manifestPath)
+	return nil
 }
 
 func newDHT(ctx context.Context, h host.Host, ds datastore.Batching) (*dualdht.DHT, error) {
