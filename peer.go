@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/iand/mfsng"
 	"github.com/ipfs/go-bitswap"
 	"github.com/ipfs/go-bitswap/network"
 	blockservice "github.com/ipfs/go-blockservice"
@@ -81,6 +83,7 @@ type PeerConfig struct {
 	FileSystemPath    string
 	ListenAddr        string
 	Libp2pKeyFile     string
+	ManifestPath      string
 }
 
 type Peer struct {
@@ -90,6 +93,7 @@ type Peer struct {
 	peerKey           crypto.PrivKey
 	datastorePath     string
 	fileSystemPath    string
+	manifestPath      string
 	builder           cid.Builder
 
 	host  host.Host
@@ -194,6 +198,8 @@ func (p *Peer) applyConfig(cfg *PeerConfig) error {
 	}
 
 	p.offline = cfg.Offline
+	p.manifestPath = cfg.ManifestPath
+
 	if cfg.ReprovideInterval == 0 {
 		p.reprovideInterval = defaultReprovideInterval
 	} else {
@@ -498,6 +504,13 @@ func (p *Peer) Sync(ctx context.Context) error {
 		return fmt.Errorf("announce mfs root: %w", err)
 	}
 
+	if p.manifestPath != "" {
+		if err := p.writeManifest(ctx); err != nil {
+			p.syncErrorsCounter.Inc()
+			return fmt.Errorf("write manifest: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -567,6 +580,12 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+		}
+
+		// It's valiid to place the manifest file in the directory being served but we don't add it to the dag
+		if path == p.manifestPath {
+			logger.Debugw("skipping manifest file", "path", path)
+			return nil // don't abort the entire walk
 		}
 
 		if rerr != nil {
@@ -824,6 +843,60 @@ func (p *Peer) logHostAddresses() {
 	}
 }
 
+func (p *Peer) writeManifest(ctx context.Context) error {
+	logger.Info("writing manifest file")
+
+	f, err := os.OpenFile(p.manifestPath, os.O_RDWR|os.O_CREATE, 0o755)
+	if err != nil {
+		return fmt.Errorf("open manifest file for writing: %s", err)
+	}
+	defer f.Close()
+
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return fmt.Errorf("mfs unavailable")
+	}
+
+	node, err := mfsRoot.GetDirectory().GetNode()
+	if err != nil {
+		return fmt.Errorf("get root node: %s", err)
+	}
+
+	man := &Manifest{
+		RootCid: node.Cid().String(),
+	}
+
+	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
+	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if fde, ok := de.(*mfsng.File); ok {
+			mfile := ManifestFile{
+				Path: path,
+				Cid:  fde.Cid().String(),
+			}
+			info, err := fde.Stat()
+			if err == nil {
+				mfile.Size = info.Size()
+			}
+			man.Files = append(man.Files, mfile)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("walk: %w", err)
+	}
+
+	sort.Slice(man.Files, func(a, b int) bool {
+		return man.Files[a].Path < man.Files[b].Path
+	})
+
+	return json.NewEncoder(f).Encode(man)
+}
+
 func newDHT(ctx context.Context, h host.Host, ds datastore.Batching) (*dualdht.DHT, error) {
 	dhtOpts := []dualdht.Option{
 		dualdht.DHTOption(dht.NamespacedValidator("pk", record.PublicKeyValidator{})),
@@ -938,4 +1011,15 @@ func (s *firstBlockSplitter) NextBytes() ([]byte, error) {
 
 func (s *firstBlockSplitter) Reader() io.Reader {
 	return s.r
+}
+
+type Manifest struct {
+	RootCid string         `json:"root_cid"`
+	Files   []ManifestFile `json:"files"`
+}
+
+type ManifestFile struct {
+	Cid  string `json:"cid"`
+	Path string `json:"path"`
+	Size int64  `json:"size,omitempty"`
 }

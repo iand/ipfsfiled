@@ -68,6 +68,7 @@ var (
 		datastorePath  string
 		fileSystemPath string
 		libp2pKeyfile  string
+		manifestPath   string
 		offline        bool
 	}
 
@@ -95,6 +96,12 @@ var (
 			Usage:       "Path to libp2p key file.",
 			Value:       "/mnt/disk1/data/ipfsfiled/peer.key",
 			Destination: &ipfsConfig.libp2pKeyfile,
+		},
+		&cli.StringFlag{
+			Name:        "ipfs-manifest",
+			Usage:       "Path to use for json manifest of all files in filesystem. May be within the filesystem being served.",
+			Value:       "",
+			Destination: &ipfsConfig.manifestPath,
 		},
 		&cli.BoolFlag{
 			Name:        "offline",

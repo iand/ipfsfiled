@@ -51,6 +51,7 @@ var app = &cli.App{
 			DatastorePath:  ipfsConfig.datastorePath,
 			FileSystemPath: ipfsConfig.fileSystemPath,
 			Libp2pKeyFile:  ipfsConfig.libp2pKeyfile,
+			ManifestPath:   ipfsConfig.manifestPath,
 			Offline:        ipfsConfig.offline,
 		})
 		if err != nil {

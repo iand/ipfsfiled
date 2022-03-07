@@ -12,6 +12,7 @@ require (
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/iand/mfsng v0.0.0-20220307130518-573b8f6adfea
 	github.com/ipfs/go-bitswap v0.5.1
 	github.com/ipfs/go-blockservice v0.2.1
 	github.com/ipfs/go-cid v0.1.0
