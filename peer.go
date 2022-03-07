@@ -660,12 +660,13 @@ func (p *Peer) announceMfsFiles(ctx context.Context) error {
 		return fmt.Errorf("get root node: %s", err)
 	}
 
+	// provide root synchronously
 	logger.Infow("providing mfs root", "cid", rootNode.Cid().String())
-
 	if err := p.dht.Provide(ctx, rootNode.Cid(), true); err != nil {
 		return fmt.Errorf("provide mfs root: %w", err)
 	}
 
+	logger.Debug("providing files")
 	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
 	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
 		select {
@@ -675,8 +676,8 @@ func (p *Peer) announceMfsFiles(ctx context.Context) error {
 		}
 
 		if fde, ok := de.(*mfsng.File); ok {
-			logger.Debugw("providing file", "cid", fde.Cid().String(), "path", path)
-			if err := p.dht.Provide(ctx, fde.Cid(), true); err != nil {
+			// provide files asynchronously
+			if err := p.reprovider.Provide(fde.Cid()); err != nil {
 				return fmt.Errorf("provide file: %w", err)
 			}
 		}
@@ -744,7 +745,7 @@ func (p *Peer) addFile(ctx context.Context, path string, di fs.DirEntry) (ipld.N
 	}
 	logger.Debugw("written to mfs", "cid", node.Cid().String(), "mfs_path", mfsPath)
 
-	if err := p.dht.Provide(ctx, node.Cid(), false); err != nil {
+	if err := p.reprovider.Provide(node.Cid()); err != nil {
 		return node, fmt.Errorf("provide file cid: %w", err)
 	}
 	logger.Debugw("announced file to dht", "cid", node.Cid().String())
