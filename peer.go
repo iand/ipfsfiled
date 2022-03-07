@@ -839,20 +839,6 @@ func (p *Peer) lookupDir(mfsDir string) (*mfs.Directory, error) {
 	return d, nil
 }
 
-func (p *Peer) rootCid() (cid.Cid, error) {
-	mfsRoot := p.getMfsRoot()
-	if mfsRoot == nil {
-		return cid.Undef, fmt.Errorf("mfs unavailable")
-	}
-
-	node, err := mfsRoot.GetDirectory().GetNode()
-	if err != nil {
-		return cid.Undef, fmt.Errorf("get node: %s", err)
-	}
-
-	return node.Cid(), nil
-}
-
 func (p *Peer) logHostAddresses() {
 	if p.offline {
 		logger.Debugf("not listening, running in offline mode")
@@ -965,8 +951,6 @@ func (p *Peer) readManifestRootCid(ctx context.Context) (string, error) {
 	if err := json.NewDecoder(f).Decode(&man); err != nil {
 		return "", fmt.Errorf("decode json: %w", err)
 	}
-
-	logger.Debugf("manifest root cid: %s", man.RootCid)
 	return man.RootCid, nil
 }
 
