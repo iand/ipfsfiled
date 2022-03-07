@@ -498,8 +498,8 @@ func (p *Peer) Sync(ctx context.Context) error {
 		return fmt.Errorf("ensure files indexed: %w", err)
 	}
 
-	// provide the mfs root on the dht and ipns
-	if err := p.announceMfsRoot(ctx); err != nil {
+	// provide the mfs root and files on the dht
+	if err := p.announceMfsFiles(ctx); err != nil {
 		p.syncErrorsCounter.Inc()
 		return fmt.Errorf("announce mfs root: %w", err)
 	}
@@ -649,16 +649,42 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 	})
 }
 
-func (p *Peer) announceMfsRoot(ctx context.Context) error {
-	rootCid, err := p.rootCid()
-	if err != nil {
-		return fmt.Errorf("get mfs root cid: %s", err)
+func (p *Peer) announceMfsFiles(ctx context.Context) error {
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return fmt.Errorf("mfs unavailable")
 	}
-	logger.Infow("current mfs root", "cid", rootCid.String())
 
-	if err := p.dht.Provide(ctx, rootCid, true); err != nil {
+	rootNode, err := mfsRoot.GetDirectory().GetNode()
+	if err != nil {
+		return fmt.Errorf("get root node: %s", err)
+	}
+
+	logger.Infow("providing mfs root", "cid", rootNode.Cid().String())
+
+	if err := p.dht.Provide(ctx, rootNode.Cid(), true); err != nil {
 		return fmt.Errorf("provide mfs root: %w", err)
 	}
+
+	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
+	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if fde, ok := de.(*mfsng.File); ok {
+			logger.Debugw("providing file", "cid", fde.Cid().String(), "path", path)
+			if err := p.dht.Provide(ctx, fde.Cid(), true); err != nil {
+				return fmt.Errorf("provide file: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("walk: %w", err)
+	}
+
 	return nil
 }
 
