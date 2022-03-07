@@ -498,8 +498,8 @@ func (p *Peer) Sync(ctx context.Context) error {
 		return fmt.Errorf("ensure files indexed: %w", err)
 	}
 
-	// provide the mfs root and files on the dht
-	if err := p.announceMfsFiles(ctx); err != nil {
+	// provide the new mfs root on the dht
+	if err := p.announceMfsRoot(ctx); err != nil {
 		p.syncErrorsCounter.Inc()
 		return fmt.Errorf("announce mfs root: %w", err)
 	}
@@ -649,7 +649,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 	})
 }
 
-func (p *Peer) announceMfsFiles(ctx context.Context) error {
+func (p *Peer) announceMfsRoot(ctx context.Context) error {
 	mfsRoot := p.getMfsRoot()
 	if mfsRoot == nil {
 		return fmt.Errorf("mfs unavailable")
@@ -666,7 +666,16 @@ func (p *Peer) announceMfsFiles(ctx context.Context) error {
 		return fmt.Errorf("provide mfs root: %w", err)
 	}
 
-	logger.Debug("providing files")
+	return nil
+}
+
+func (p *Peer) ProvideExistingFiles(ctx context.Context) error {
+	mfsRoot := p.getMfsRoot()
+	if mfsRoot == nil {
+		return fmt.Errorf("mfs unavailable")
+	}
+
+	logger.Debug("providing existing files")
 	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
 	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
 		select {

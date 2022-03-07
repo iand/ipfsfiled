@@ -80,6 +80,11 @@ var app = &cli.App{
 			logger.Errorf("sync failure: %v", err)
 		}
 
+		// Register all existing files with reprovider
+		if err := p.ProvideExistingFiles(ctx); err != nil {
+			logger.Errorf("provide failure: %v", err)
+		}
+
 		// TODO: fsnotify support to augment polling
 		for {
 			select {
