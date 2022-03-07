@@ -584,7 +584,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 
 		// It's valiid to place the manifest file in the directory being served but we don't add it to the dag
 		if path == p.manifestPath {
-			logger.Debugw("skipping manifest file", "path", path)
+			logger.Debugw("found manifest, not adding to blockstore", "path", path)
 			return nil // don't abort the entire walk
 		}
 
