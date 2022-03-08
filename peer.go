@@ -675,7 +675,16 @@ func (p *Peer) ProvideExistingFiles(ctx context.Context) error {
 		return fmt.Errorf("mfs unavailable")
 	}
 
-	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
+	rootNode, err := mfsRoot.GetDirectory().GetNode()
+	if err != nil {
+		return fmt.Errorf("get root node: %s", err)
+	}
+
+	fsys, err := mfsng.ReadFS(rootNode, p.dag)
+	if err != nil {
+		return fmt.Errorf("readfs: %s", err)
+	}
+
 	count := 0
 	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
 		select {
@@ -901,7 +910,11 @@ func (p *Peer) writeManifest(ctx context.Context) error {
 		RootCid: node.Cid().String(),
 	}
 
-	fsys := mfsng.FromDir(mfsRoot.GetDirectory())
+	fsys, err := mfsng.ReadFS(node, p.dag)
+	if err != nil {
+		return fmt.Errorf("readfs: %s", err)
+	}
+
 	if err := fs.WalkDir(fsys, ".", func(path string, de fs.DirEntry, rerr error) error {
 		select {
 		case <-ctx.Done():
