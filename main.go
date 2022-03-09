@@ -38,21 +38,20 @@ var app = &cli.App{
 	Usage:   "watches a filesystem and serves its files over ipfs",
 	Version: version,
 	Flags: flagSet(
+		flags,
 		loggingFlags,
-		ipfsFlags,
-		scheduleFlags,
 		diagnosticsFlags,
 	),
 	Before: configure,
 	Action: func(cctx *cli.Context) error {
 		ctx := cctx.Context
 		p, err := NewPeer(&PeerConfig{
-			ListenAddr:     ipfsConfig.listenAddr,
-			DatastorePath:  ipfsConfig.datastorePath,
-			FileSystemPath: ipfsConfig.fileSystemPath,
-			Libp2pKeyFile:  ipfsConfig.libp2pKeyfile,
-			ManifestPath:   ipfsConfig.manifestPath,
-			Offline:        ipfsConfig.offline,
+			ListenAddr:     config.listenAddr,
+			DatastorePath:  config.datastorePath,
+			FileSystemPath: config.fileSystemPath,
+			Libp2pKeyFile:  config.libp2pKeyfile,
+			ManifestPath:   config.manifestPath,
+			Offline:        config.offline,
 		})
 		if err != nil {
 			return fmt.Errorf("new ipfs peer: %w", err)
@@ -60,16 +59,16 @@ var app = &cli.App{
 		defer p.Close()
 
 		var syncChan <-chan time.Time
-		if scheduleConfig.syncInterval > 0 {
-			syncScheduler := time.NewTicker(scheduleConfig.syncInterval)
+		if config.syncInterval > 0 {
+			syncScheduler := time.NewTicker(config.syncInterval)
 			syncChan = syncScheduler.C
 		} else {
 			logger.Info("scheduled filesystem sync is disabled")
 		}
 
 		var gcChan <-chan time.Time
-		if scheduleConfig.garbageCollectionInterval > 0 {
-			gcScheduler := time.NewTicker(scheduleConfig.garbageCollectionInterval)
+		if config.garbageCollectionInterval > 0 {
+			gcScheduler := time.NewTicker(config.garbageCollectionInterval)
 			gcChan = gcScheduler.C
 		} else {
 			logger.Info("scheduled garbage collection is disabled")

@@ -575,7 +575,7 @@ func (p *Peer) ensureFilesIndexed(ctx context.Context) error {
 		p.filesSyncedGauge.Set(float64(filesSynced))
 	}()
 
-	return filepath.WalkDir(ipfsConfig.fileSystemPath, func(path string, di fs.DirEntry, rerr error) error {
+	return filepath.WalkDir(config.fileSystemPath, func(path string, di fs.DirEntry, rerr error) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
