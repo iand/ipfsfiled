@@ -4,7 +4,7 @@ env:
 on:
   workflow_dispatch:
   schedule:
-    - cron: "52 9 * * 3" # 9:52 UTC weekly on Wednesday
+    - cron: "15 6 * * 1" # 6:15 UTC weekly on Monday
 
 jobs:
   dep_update:
