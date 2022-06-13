@@ -1,5 +1,11 @@
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
 name: Check
 jobs:
   check:
