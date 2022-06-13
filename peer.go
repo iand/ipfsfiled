@@ -46,8 +46,8 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	dualdht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	record "github.com/libp2p/go-libp2p-record"
-	libp2ptls "github.com/libp2p/go-libp2p-tls"
 	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 )
