@@ -39,7 +39,6 @@ import (
 	"github.com/ipfs/go-unixfs/importer/trickle"
 	pool "github.com/libp2p/go-buffer-pool"
 	"github.com/libp2p/go-libp2p"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	crypto "github.com/libp2p/go-libp2p-core/crypto"
 	host "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -48,6 +47,7 @@ import (
 	dualdht "github.com/libp2p/go-libp2p-kad-dht/dual"
 	record "github.com/libp2p/go-libp2p-record"
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
+	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/multiformats/go-multiaddr"
 	multihash "github.com/multiformats/go-multihash"
 )
@@ -388,6 +388,10 @@ func (p *Peer) bootstrap(ctx context.Context, peers []peer.AddrInfo) error {
 func (p *Peer) setupLibp2p(ctx context.Context) error {
 	var ddht *dualdht.DHT
 	var err error
+	connmgr, err := connmgr.NewConnManager(100, 600, connmgr.WithGracePeriod(time.Minute))
+	if err != nil {
+		return fmt.Errorf("libp2p: %w", err)
+	}
 
 	finalOpts := []libp2p.Option{
 		libp2p.Identity(p.peerKey),
@@ -397,7 +401,7 @@ func (p *Peer) setupLibp2p(ctx context.Context) error {
 			return ddht, err
 		}),
 		libp2p.NATPortMap(),
-		libp2p.ConnectionManager(connmgr.NewConnManager(100, 600, time.Minute)),
+		libp2p.ConnectionManager(connmgr),
 		libp2p.EnableAutoRelay(),
 		libp2p.EnableNATService(),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
