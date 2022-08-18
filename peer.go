@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -986,7 +985,7 @@ func newDHT(ctx context.Context, h host.Host, ds datastore.Batching) (*dualdht.D
 }
 
 func loadOrInitPeerKey(kf string) (crypto.PrivKey, error) {
-	data, err := ioutil.ReadFile(kf)
+	data, err := os.ReadFile(kf)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -1007,7 +1006,7 @@ func loadOrInitPeerKey(kf string) (crypto.PrivKey, error) {
 			return nil, err
 		}
 
-		if err := ioutil.WriteFile(kf, data, 0o600); err != nil {
+		if err := os.WriteFile(kf, data, 0o600); err != nil {
 			return nil, err
 		}
 
