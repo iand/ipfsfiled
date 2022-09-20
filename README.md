@@ -2,8 +2,8 @@
 
 A daemon to watch a filesystem and ensure the files it contains are accessible over [IPFS](https://ipfs.io/).
 
-[![Check Status](https://github.com/iand/ipfsfiled/actions/workflows/check.yml/badge.svg?branch=master)](https://github.com/iand/ipfsfiled/actions/workflows/check.yml)
-[![Test Status](https://github.com/iand/ipfsfiled/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/iand/ipfsfiled/actions/workflows/test.yml)
+[![Check Status](https://github.com/iand/ipfsfiled/actions/workflows/check.yml/badge.svg)](https://github.com/iand/ipfsfiled/actions/workflows/check.yml)
+[![Test Status](https://github.com/iand/ipfsfiled/actions/workflows/test.yml/badge.svg)](https://github.com/iand/ipfsfiled/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/iand/ipfsfiled)](https://goreportcard.com/report/github.com/iand/ipfsfiled)
 [![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/github.com/iand/ipfsfiled)
 
