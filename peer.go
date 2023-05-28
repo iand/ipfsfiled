@@ -15,27 +15,27 @@ import (
 	"time"
 
 	"github.com/iand/mfsng"
-	"github.com/ipfs/go-bitswap"
-	"github.com/ipfs/go-bitswap/network"
-	blockservice "github.com/ipfs/go-blockservice"
+	"github.com/ipfs/boxo/bitswap"
+	"github.com/ipfs/boxo/bitswap/network"
+	blockservice "github.com/ipfs/boxo/blockservice"
+	blockstore "github.com/ipfs/boxo/blockstore"
+	offline "github.com/ipfs/boxo/exchange/offline"
+	files "github.com/ipfs/boxo/files"
+	"github.com/ipfs/boxo/filestore"
+	"github.com/ipfs/boxo/ipld/merkledag"
+	"github.com/ipfs/boxo/ipld/unixfs"
+	"github.com/ipfs/boxo/ipld/unixfs/importer/helpers"
+	"github.com/ipfs/boxo/ipld/unixfs/importer/trickle"
+	ipns "github.com/ipfs/boxo/ipns"
+	"github.com/ipfs/boxo/mfs"
+	provider "github.com/ipfs/boxo/provider"
+	"github.com/ipfs/boxo/provider/queue"
+	"github.com/ipfs/boxo/provider/simple"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-ds-badger2"
-	"github.com/ipfs/go-filestore"
-	blockstore "github.com/ipfs/go-ipfs-blockstore"
-	offline "github.com/ipfs/go-ipfs-exchange-offline"
-	files "github.com/ipfs/go-ipfs-files"
-	provider "github.com/ipfs/go-ipfs-provider"
-	"github.com/ipfs/go-ipfs-provider/queue"
-	"github.com/ipfs/go-ipfs-provider/simple"
 	ipld "github.com/ipfs/go-ipld-format"
-	ipns "github.com/ipfs/go-ipns"
-	"github.com/ipfs/go-merkledag"
 	metrics "github.com/ipfs/go-metrics-interface"
-	"github.com/ipfs/go-mfs"
-	"github.com/ipfs/go-unixfs"
-	"github.com/ipfs/go-unixfs/importer/helpers"
-	"github.com/ipfs/go-unixfs/importer/trickle"
 	pool "github.com/libp2p/go-buffer-pool"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -401,7 +401,6 @@ func (p *Peer) setupLibp2p(ctx context.Context) error {
 		}),
 		libp2p.NATPortMap(),
 		libp2p.ConnectionManager(connmgr),
-		libp2p.EnableAutoRelay(),
 		libp2p.EnableNATService(),
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.DefaultTransports,

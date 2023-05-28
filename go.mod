@@ -4,25 +4,15 @@ go 1.19
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
-	github.com/iand/mfsng v0.1.1-0.20220609091524-7887234e981a
-	github.com/ipfs/go-bitswap v0.12.0
-	github.com/ipfs/go-blockservice v0.5.2
+	github.com/iand/mfsng v0.2.0
+	github.com/ipfs/boxo v0.8.1
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-datastore v0.6.0
 	github.com/ipfs/go-ds-badger2 v0.1.3
-	github.com/ipfs/go-filestore v1.2.1
-	github.com/ipfs/go-ipfs-blockstore v1.3.1
-	github.com/ipfs/go-ipfs-exchange-offline v0.3.1
-	github.com/ipfs/go-ipfs-files v0.3.0
-	github.com/ipfs/go-ipfs-provider v0.8.2
 	github.com/ipfs/go-ipld-format v0.4.0
-	github.com/ipfs/go-ipns v0.3.1
 	github.com/ipfs/go-log/v2 v2.5.1
-	github.com/ipfs/go-merkledag v0.10.0
 	github.com/ipfs/go-metrics-interface v0.0.1
 	github.com/ipfs/go-metrics-prometheus v0.0.2
-	github.com/ipfs/go-mfs v0.2.2
-	github.com/ipfs/go-unixfs v0.4.6
 	github.com/libp2p/go-buffer-pool v0.1.0
 	github.com/libp2p/go-libp2p v0.27.3
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
@@ -76,25 +66,16 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/huin/goupnp v1.2.0 // indirect
 	github.com/ipfs/bbloom v0.0.4 // indirect
-	github.com/ipfs/boxo v0.8.1 // indirect
 	github.com/ipfs/go-bitfield v1.1.0 // indirect
 	github.com/ipfs/go-block-format v0.1.2 // indirect
 	github.com/ipfs/go-cidutil v0.1.0 // indirect
-	github.com/ipfs/go-fetcher v1.6.2 // indirect
-	github.com/ipfs/go-ipfs-chunker v0.0.6 // indirect
 	github.com/ipfs/go-ipfs-delay v0.0.1 // indirect
-	github.com/ipfs/go-ipfs-ds-help v1.1.1 // indirect
-	github.com/ipfs/go-ipfs-exchange-interface v0.2.1 // indirect
-	github.com/ipfs/go-ipfs-posinfo v0.0.2 // indirect
 	github.com/ipfs/go-ipfs-pq v0.0.3 // indirect
 	github.com/ipfs/go-ipfs-util v0.0.3 // indirect
 	github.com/ipfs/go-ipld-cbor v0.0.6 // indirect
 	github.com/ipfs/go-ipld-legacy v0.1.1 // indirect
-	github.com/ipfs/go-libipfs v0.7.0 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
-	github.com/ipfs/go-path v0.3.2 // indirect
 	github.com/ipfs/go-peertaskqueue v0.8.1 // indirect
-	github.com/ipfs/go-verifcid v0.0.3 // indirect
 	github.com/ipld/go-codec-dagpb v1.6.0 // indirect
 	github.com/ipld/go-ipld-prime v0.20.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
@@ -175,5 +156,5 @@ require (
 	nhooyr.io/websocket v1.8.7 // indirect
 )
 
-// See https://github.com/ipfs/go-unixfs/pull/117
-replace github.com/ipfs/go-unixfs => github.com/iand/go-unixfs v0.3.2-0.20220113124813-f455d36c5fd1
+// unixfs 1.5 support
+replace github.com/ipfs/boxo => github.com/iand/boxo v0.0.0-20230528163357-4ab7b86ae2ae
